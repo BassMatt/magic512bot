@@ -4,8 +4,8 @@ import discord
 from dotenv import load_dotenv
 from discord import app_commands
 import os
-from api import create_loan
-from errors import LoanListInputError
+from errors import CardListInputError
+from db import insert_cardloans
 
 load_dotenv()
 
@@ -42,11 +42,15 @@ class LoanList(discord.ui.Modal, title='LoanList'):
         super().__init__(title='LoanList')
 
     async def on_submit(self, interaction: discord.Interaction):
-        create_loan(self.loanlist.value.split("\n"), interaction.user.id, self.borrower.id, self.tag)
+        insert_cardloans(
+            cards=self.loanlist.value.split("\n"), 
+            lender=interaction.user.id, 
+            borrower=self.borrower.id, 
+            order_tag=self.tag)
         await interaction.response.send_message("Successfully committed transaction!")
 
     async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
-        if isinstance(error, LoanListInputError):
+        if isinstance(error, CardListInputError):
             await interaction.response.send_message(str(error), ephemeral=True)
         else:
             print(traceback.format_exc())
