@@ -1,43 +1,27 @@
 import requests
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, delete
 from dotenv import load_dotenv
 import os
-from models import Base, CardLoan
+from models import CardLoan
 from typing import Optional
 from util import parse_cardlist
+import datetime
 
 load_dotenv()
 engine=create_engine(os.getenv("DB_CONNECTION_STRING"))
 Session = sessionmaker(engine)
 
-def download_oracle_cards():
-    resp = requests.get("https://api.scryfall.com/bulk-data")
-    if "data" not in resp.json():
-        print("Unable to retrieve scryfall bulk-data links")
-        return None
-    
-    for item in resp.json()["data"]:
-        if item["type"] == "oracle-cards":
-            oracle_url = item["download_url"]
-            with requests.get(oracle_url, stream=True) as response:
-                with open("ORACLE_CARDS.json", mode="wb") as file:
-                    for chunk in response.iter_content(chunk_size=10 * 1024):
-                        file.write(chunk)
-
-def update_remote_db():
-    # check if oracle card db is downloaded locally
-    # upload to remote database
-    return
-
 def insert_cardloans(cards: list[str], borrower: int, lender: int, order_tag: str = ""):
     """
-    Creates and inserts CardLoan objects into database with specified variables
+    Upserts Loan Objects into database based on if (Card Name + Tag) is already present
     """
     card_loans = []
-    for card_name in parse_cardlist(cards):
+    for quantity, card_name in parse_cardlist(cards):
         card_loans.append(CardLoan(
+            created_at = datetime.datetime.now(),
             card = card_name,
+            quantity = quantity,
             lender = lender,
             borrower = borrower,
             order_tag = order_tag
@@ -55,7 +39,7 @@ def bulk_delete_cardloans(lender: int, borrower: Optional[int], tag: Optional[st
     """
     pass
 
-def delete_cardloans(lender: int, borrower: int, tag: Optional[str], card_names: list[str]) -> list[str]:
+def delete_cardloans(lender: int, borrower: int, tag: Optional[str], card_list: list[str]) -> list[str]:
     """
     Removes rows from card_loans table for a given lender if they
     match all the provided parameters and are in the specified list of
@@ -63,13 +47,25 @@ def delete_cardloans(lender: int, borrower: int, tag: Optional[str], card_names:
 
     Returns list[str] of card_names unable to be found / deleted in the provided card_names list.
     """
+
+    for quantity, card_name in parse_cardlist(card_list):
+        pass
+
+
     pass
 
-def get_cardloans(lender: int, borrower: Optional[int], tag: Optional[str]) -> list[CardLoan]:
+def get_cardloans(lender: int, borrower: int, tag: Optional[str]) -> list[CardLoan]:
     """
     Returns a list of CardLoan objects that match the given parameters
     """
-    pass
+
+    statement = select(CardLoan).where(CardLoan.lender == lender, CardLoan.borrower == borrower)
+    if tag:
+        statement = statement.where(CardLoan.order_tag == tag)
+
+    with Session() as session:
+        result = session.scalars(statement).all()
+        return result
 
 def bulk_get_cardloans(lender: int):
     """
@@ -79,6 +75,3 @@ def bulk_get_cardloans(lender: int):
         statement = select(CardLoan).filter_by(lender=lender)
         return session.scalars(statement).all()
 
-def create_tables():
-    # creates tables in DB based on ORM Mapped Classes
-    Base.metadata.create_all(engine)

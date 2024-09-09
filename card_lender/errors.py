@@ -18,3 +18,10 @@ class CardListInputError(Error):
         for line in "\n".join(self.line_errors):
             message += line
         return message
+    
+class CardNotFoundError(Error):
+    """
+    Exception raised when unable to find cards in database to return.
+    """
+    def __str__(self):
+        message = f"unable to find card(s) in database. Please ensure all cards in cardlist match a given loan."

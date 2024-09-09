@@ -1,22 +1,16 @@
-from sqlalchemy import Integer, String
-from sqlalchemy.orm import DeclarativeBase, mapped_column
+from sqlalchemy import Integer, String, DateTime
+from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped
+import datetime
 
 class Base(DeclarativeBase):
     pass
 
-# class Card(Base):
-#    __tablename__ = 'cards'
-#    id = mapped_column(Integer(), primary_key=True)
-
 class CardLoan(Base):
     __tablename__ = 'card_loans'
-    id = mapped_column(Integer(), nullable=False, primary_key=True)
-    card = mapped_column(String(100), nullable=False) # for now, just have cards as names
-    lender = mapped_column(Integer(), nullable=False) # discord user id of lender
-    borrower = mapped_column(Integer(), nullable=False) # discord user id of borrower
-    order_tag = mapped_column(String(100), nullable=True) # optional order tag
-
-# class Member(Base):
-#     id = mapped_column(String(100), primary_key=True)
-#     borrowed_cards = mapped_column()
-#     loaned_cards = mapped_column()
+    id: Mapped[int] = mapped_column(Integer(), nullable=False, primary_key=True)
+    card: Mapped[str] = mapped_column(String(100), nullable=False) # for now, just have cards as names
+    lender: Mapped[int] = mapped_column(Integer(), nullable=False) # discord user id of lender
+    borrower: Mapped[int] = mapped_column(Integer(), nullable=False) # discord user id of borrower
+    quantity: Mapped[int] = mapped_column(Integer(), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(), nullable=False)
+    order_tag: Mapped[str] = mapped_column(String(100), nullable=False) # order tag, if not specified defaults to ""
