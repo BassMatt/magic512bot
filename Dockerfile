@@ -69,7 +69,10 @@ FROM python-base as production
 
 RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
     apt-get install -y --no-install-recommends \
-    ca-certificates && \
+    ca-certificates \
+    musl-dev \
+    libpq-dev \
+    gcc && \
     apt-get clean
 
 # copy in our built poetry + venv
