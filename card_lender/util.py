@@ -43,7 +43,7 @@ def format_loanlist_output(cards: list[CardLoan]):
         header = ["Name", "Quantity", "Tag", "Date"],
         body = body,
         column_widths = [30, 10, 10, 12],
-        style = PresetStyle.thin_compact,
+        style = PresetStyle.borderless,
         alignments = [Alignment.LEFT, Alignment.LEFT, Alignment.LEFT, Alignment.LEFT]
     )
 
@@ -70,7 +70,7 @@ def format_bulk_loanlist_output(cards: list[CardLoan]):
         header = ["Borrower", "Tag", "Count"],
         body = sorted(bulk_list, key=lambda row: (row[1], row[2])),
         column_widths = [25, 10, 10],
-        style = PresetStyle.thin_compact,
+        style = PresetStyle.borderless,
         alignments = [Alignment.LEFT, Alignment.LEFT, Alignment.LEFT]
     )
 

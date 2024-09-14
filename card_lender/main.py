@@ -109,6 +109,7 @@ async def loan(interaction: discord.Interaction, borrower: discord.Member, tag: 
 @app_commands.describe(
     borrower='@mention member that is returning the loaned cards',
     tag='Return cards with a given order tag')
+@app_commands.rename(borrower="from")
 async def return_cards(interaction: discord.Interaction, borrower: discord.Member, tag: Optional[str] = ""):
     return_modal = ReturnCardLoansModal(borrower, tag)
     await interaction.response.send_modal(return_modal)
@@ -130,7 +131,7 @@ async def bulk_return_Cards(interaction: discord.Interaction, borrower: discord.
 @app_commands.describe(
     borrower="@mention member that is borrowing the cards",
     tag="Query for cards with given order tag")
-@app_commands.rename(borrower="from")
+@app_commands.rename(borrower="to")
 async def get_loans(interaction: discord.Interaction, borrower: discord.Member, tag: Optional[str] = ""):
     results = db.get_cardloans(lender=interaction.user.id, borrower=borrower.id, tag=tag)
     response = f"{interaction.user.mention} has loaned **{sum(card.quantity for card in results)}** card(s) to {borrower.mention}\n\n"
