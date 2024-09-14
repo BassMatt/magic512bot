@@ -1,77 +1,155 @@
-import requests
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine, select, delete
+from sqlalchemy import create_engine, select, delete, inspect
 from dotenv import load_dotenv
-import os
-from models import CardLoan
-from typing import Optional
+from models import CardLoan, Base
 from util import parse_cardlist
 import datetime
+from errors import CardNotFoundError
 
-load_dotenv()
-engine=create_engine(os.getenv("DB_CONNECTION_STRING"))
-Session = sessionmaker(engine)
+class PostgresStore:
+    def __init__(self, conn_string: str):
+        load_dotenv()
+        self.engine=create_engine(conn_string)
+        self.Session = sessionmaker(self.engine)
 
-def insert_cardloans(cards: list[str], borrower: int, lender: int, order_tag: str = ""):
-    """
-    Upserts Loan Objects into database based on if (Card Name + Tag) is already present
-    """
-    card_loans = []
-    for quantity, card_name in parse_cardlist(cards):
-        card_loans.append(CardLoan(
-            created_at = datetime.datetime.now(),
-            card = card_name,
-            quantity = quantity,
-            lender = lender,
-            borrower = borrower,
-            order_tag = order_tag
-        ))
-    
-    with Session.begin() as session:
-        session.add_all(card_loans)
+        # create table if doesn't exist
+        ins = inspect(self.engine)
+        if not ins.has_table("card_loans"):
+            self.create_tables()
 
-def bulk_delete_cardloans(lender: int, borrower: Optional[int], tag: Optional[str]):
-    """
-    Removes rows from card_loans table for a given lender
-    based on if they match either of the two given parameters
+    def insert_cardloans(self, card_list: list[str], lender: int, borrower: int, borrower_name: str, tag: str = "") -> int:
+        """
+        Upserts Loan Objects into database based on if (Card Name + Tag) is already present
 
-    If no borrower / tag is specified, deletes all rows for a given lender.
-    """
-    pass
+        Returns int, number of cards added
+        """
+        card_loans = []
+        cards_added = 0
+        for card_name, quantity in parse_cardlist(card_list).items():
+            card_loans.append(CardLoan(
+                created_at = datetime.datetime.now(),
+                card = card_name,
+                quantity = quantity,
+                lender = lender,
+                borrower = borrower,
+                borrower_name = borrower_name,
+                order_tag = tag 
+            ))
 
-def delete_cardloans(lender: int, borrower: int, tag: Optional[str], card_list: list[str]) -> list[str]:
-    """
-    Removes rows from card_loans table for a given lender if they
-    match all the provided parameters and are in the specified list of
-    card names
+        cards_added = sum(card.quantity for card in card_loans) 
+        with self.Session.begin() as session:
+            session.add_all(card_loans)
+        
+        return cards_added
 
-    Returns list[str] of card_names unable to be found / deleted in the provided card_names list.
-    """
+    def bulk_return_cardloans(self, lender: int, borrower: int, tag: str = "") -> int:
+        """
+        Removes rows from card_loans table for a given lender
+        based on if they match either of the two given parameters
 
-    for quantity, card_name in parse_cardlist(card_list):
-        pass
+        If no borrower / tag is specified, deletes all rows for a given lender.
+        """
+        affected_row_count = 0
+        with self.Session.begin() as session:
+            stmt = delete(CardLoan).where(
+                CardLoan.lender == lender,
+                CardLoan.borrower == borrower)
+            if tag:
+                stmt.where(CardLoan.order_tag == tag)
+            
+            affected_row_count = len(session.execute(stmt).fetchall())
+        return affected_row_count
 
+    def return_cardloans(self, card_list: list[str], lender: int, borrower: int, tag: str) -> int:
+        """
+        Decrements quantity for each given card in card_list matching given parameters. If
+        multiple rows are returned for a given card, decrements earliest matching rows first.
 
-    pass
+        Deletes card from CardLoan table if cards's quantity would become 0.
 
-def get_cardloans(lender: int, borrower: int, tag: Optional[str]) -> list[CardLoan]:
-    """
-    Returns a list of CardLoan objects that match the given parameters
-    """
+        Throws CardNotFoundError if card not found in loans table, or quantity would become < 0.
 
-    statement = select(CardLoan).where(CardLoan.lender == lender, CardLoan.borrower == borrower)
-    if tag:
-        statement = statement.where(CardLoan.order_tag == tag)
+        Returns int, the number of cards successfully returned.
+        """
+        loans_to_return = parse_cardlist(card_list)
+        not_found_errors = []
+        total_return_count = 0
 
-    with Session() as session:
-        result = session.scalars(statement).all()
-        return result
+        with self.Session.begin() as session:
+            for card_name, quantity_to_return in loans_to_return.items():
+                card_query_stmt = select(CardLoan).where(
+                    CardLoan.card == card_name,
+                    CardLoan.lender == lender,
+                    CardLoan.borrower == borrower)
+                if tag:
+                    card_query_stmt = card_query_stmt.where(CardLoan.order_tag == tag)
+                
+                result = session.scalars(card_query_stmt.order_by(CardLoan.created_at)).all()
+                total_loaned_count = sum(card_loan.quantity for card_loan in result)
 
-def bulk_get_cardloans(lender: int):
-    """
-    Returns the list of all CardLoan objects for a given lender 
-    """
-    with Session.begin() as session:
-        statement = select(CardLoan).filter_by(lender=lender)
-        return session.scalars(statement).all()
+                if total_loaned_count < quantity_to_return:
+                    not_found_errors.append((card_name, quantity_to_return))
+                    continue
 
+                for card_loan in result:
+                    if card_loan.quantity < quantity_to_return:
+                        total_return_count += card_loan.quantity
+                        quantity_to_return -= card_loan.quantity
+                        session.delete(card_loan)
+                    else:
+                        card_loan.quantity -= quantity_to_return
+                        total_return_count += quantity_to_return
+                        break
+                
+            if len(not_found_errors) > 0:
+                raise CardNotFoundError(card_errors=not_found_errors)
+
+            return total_return_count 
+
+    def get_cardloans(self, lender: int, borrower: int, tag: str) -> list[CardLoan]:
+        """
+        Returns a list of CardLoan objects that match the given parameters
+        """
+
+        statement = select(CardLoan).where(CardLoan.lender == lender, CardLoan.borrower == borrower)
+        if tag:
+            statement = statement.where(CardLoan.order_tag == tag)
+
+        with self.Session.begin() as session:
+            result = session.scalars(statement).all()
+            session.expunge_all()
+            return result
+
+    def bulk_get_cardloans(self, lender: int):
+        """
+        Returns the list of all CardLoan objects for a given lender 
+        """
+        with self.Session.begin() as session:
+            statement = select(CardLoan).where(CardLoan.lender == lender)
+            result = session.scalars(statement).all()
+            session.expunge_all()
+            return result
+
+    def create_tables(self):
+        # creates tables in DB based on ORM Mapped Classes
+        Base.metadata.create_all(self.engine)
+
+    def delete_all_cardloans(self):
+        with self.Session.begin() as session:
+            statement = delete(CardLoan)
+            result = session.execute(statement)
+            print(result.rowcount)
+
+    # def download_oracle_cards():
+    #     resp = requests.get("https://api.scryfall.com/bulk-data")
+    #     if "data" not in resp.json():
+    #         print("Unable to retrieve scryfall bulk-data links")
+    #         return None
+        
+    #     for item in resp.json()["data"]:
+    #         if item["type"] == "oracle-cards":
+    #             oracle_url = item["download_url"]
+    #             with requests.get(oracle_url, stream=True) as response:
+    #                 with open("ORACLE_CARDS.json", mode="wb") as file:
+    #                     for chunk in response.iter_content(chunk_size=10 * 1024):
+    #                         file.write(chunk)

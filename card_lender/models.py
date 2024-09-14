@@ -11,6 +11,7 @@ class CardLoan(Base):
     card: Mapped[str] = mapped_column(String(100), nullable=False) # for now, just have cards as names
     lender: Mapped[int] = mapped_column(Integer(), nullable=False) # discord user id of lender
     borrower: Mapped[int] = mapped_column(Integer(), nullable=False) # discord user id of borrower
+    borrower_name: Mapped[String] = mapped_column(String(100), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer(), nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(), nullable=False)
     order_tag: Mapped[str] = mapped_column(String(100), nullable=False) # order tag, if not specified defaults to ""
