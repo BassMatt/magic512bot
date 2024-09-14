@@ -89,8 +89,8 @@ class ReturnCardLoansModal(discord.ui.Modal, title='LoanList'):
         else:
             print(traceback.format_exc())
             await interaction.response.send_message('Oops! Something went wrong.', ephemeral=True)
-MY_GUILD=discord.Object(id=os.getenv("TEST_GUILD_ID"))
-ROLE_CHECK_ID = int(os.getenv("TEST_ROLE_ID")) if os.getenv("TEST_ROLE_ID") else int(os.getenv("TEAM_ROLE_ID"))
+MY_GUILD=discord.Object(id=os.getenv("GUILD_ID"))
+ROLE_CHECK_ID = int(os.getenv("ROLE_ID")) 
 client = MyClient()
 db = PostgresStore(os.getenv("DB_CONNECTION_STRING"))
 
