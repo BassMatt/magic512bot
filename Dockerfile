@@ -81,6 +81,6 @@ COPY --from=builder-base $VIRTUAL_ENV $VIRTUAL_ENV
 
 WORKDIR /app
 COPY poetry.lock pyproject.toml ./
-COPY card_lender/ card_lender/
+COPY magic512bot/ magic512bot/
 
-CMD ["python", "card_lender/main.py"]
+CMD ["python", "magic512bot/main.py"]

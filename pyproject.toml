@@ -1,10 +1,10 @@
 [tool.poetry]
-name = "card-lender"
+name = "magic512bot"
 version = "0.1.0"
 description = ""
-authors = ["mbass <mbass@atlassian.com>"]
+authors = ["bassmatt bassmatt0515@gmail.com"]
 readme = "README.md"
-packages = [{include = "card_lender"}]
+packages = [{include = "magic512bot"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"

@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: magic512bot
+  labels:
+    app: magic512bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: magic512bot
+  template:
+    metadata:
+      labels:
+        app: magic512bot
+    spec:
+      containers:
+        - name: app
+          image: "${DOCKER_IMAGE}"

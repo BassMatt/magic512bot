@@ -1,5 +1,5 @@
 DOCKER_USERNAME=bassmatt
-APPLICATION_NAME=card-lender
+APPLICATION_NAME=magic512bot
 GIT_HASH ?= $(shell git log --format="%h" -n 1)
 
 build:
