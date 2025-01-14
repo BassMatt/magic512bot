@@ -1,4 +1,4 @@
-# Card Lender Bot
+# Magic 512 Bot
 
 ### Local Setup
 
