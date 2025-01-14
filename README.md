@@ -28,7 +28,7 @@ There are a couple database scripts that help with local testing. This is how I 
 In `.vscode/settings.json` you'll want to put
 ```
     "python.analysis.extraPaths": [
-        "./card_lender"
+        "./magic512bot"
     ],
 ```
 so pylance is able to properly import things
