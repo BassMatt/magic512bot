@@ -16,7 +16,7 @@ You'll need several environment variables:
 There are a couple database scripts that help with local testing. This is how I create the test sqlite database.
 
 ```
-> cd card_lender
+> cd magic512bot
 > python
 
 >>> import dbutil
