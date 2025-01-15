@@ -3,3 +3,8 @@ steps:
     command: echo "Hello!"
     agents:
       queue: kubernetes
+    plugins:
+      - kubernetes:
+          gitEnvFrom:
+            - secretRef:
+                name: my-private-git-ssh-key
