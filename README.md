@@ -31,4 +31,4 @@ In `.vscode/settings.json` you'll want to put
         "./magic512bot"
     ],
 ```
-so pylance is able to properly import things
+so pylance is able to properly import thing
