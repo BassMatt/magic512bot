@@ -1,6 +1,6 @@
 steps:
   - label: "Example Test"
-    command: echo "Hello!"
+    command: echo "Hello2!"
     agents:
       queue: kubernetes
     plugins:
