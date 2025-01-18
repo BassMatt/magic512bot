@@ -11,6 +11,7 @@ steps:
       queue: kubernetes
 
   - wait
+  - block: "wait for ssh"
 
   - label: "Deploy to Kubernetes"
     command: .buildkite/buildkite-deploy
