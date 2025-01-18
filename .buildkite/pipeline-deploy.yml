@@ -1,5 +1,16 @@
 steps:
-  - label: ":rocket: Push to :kubernetes:"
+  - label: "Build & Push"
+    commands: 
+      - "make build"
+      - "make push"
+    plugins:
+      - docker-login#v2.0.1:
+          username: bassmatt
+          password-env: DOCKER_PASSWORD
+
+  - wait
+
+  - label: "Deploy to Kubernetes"
     command: .buildkite/buildkite-deploy
     concurrency: 1
     concurrency_group: deploy/prod

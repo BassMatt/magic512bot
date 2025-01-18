@@ -2,10 +2,9 @@
 
 set -euo pipefail
 
-if [ -z "${DOCKER_IMAGE:-}" ]; then
-  echo ":boom: \$DOCKER_IMAGE missing" 1>&2
-  exit 1
-fi
+DOCKER_IMAGE=bassmatt/magic512bot:latest
+
+docker pull $DOCKER_IMAGE
 
 manifest="$(mktemp)"
 
