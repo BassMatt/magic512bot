@@ -4,10 +4,11 @@ steps:
     commands: 
       - "make build"
       - "make push"
-    plugins:
-      - docker-login#v2.0.1:
-          username: bassmatt
-          password-env: DOCKER_PASSWORD
+      - "sleep 10000"
+    #plugins:
+    #  - docker-login#v2.0.1:
+    #      username: bassmatt
+    #      password-env: DOCKER_PASSWORD
     agents:
       queue: kubernetes
 
