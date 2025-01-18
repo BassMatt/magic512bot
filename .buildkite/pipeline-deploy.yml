@@ -14,5 +14,3 @@ steps:
     command: .buildkite/buildkite-deploy
     concurrency: 1
     concurrency_group: deploy/prod
-    agents:
-      queue: kubernetes
