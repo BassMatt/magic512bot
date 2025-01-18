@@ -1,13 +1,11 @@
 steps:
-  - block: "wait for ssh"
   - label: "Build & Push"
     commands: 
-      - "sleep 10000"
       - .buildkite/build.sh
-    #plugins:
-    #  - docker-login#v2.0.1:
-    #      username: bassmatt
-    #      password-env: DOCKER_PASSWORD
+    plugins:
+      - docker-login#v2.0.1:
+          username: bassmatt
+          password-env: DOCKER_PASSWORD
     agents:
       queue: kubernetes
 
