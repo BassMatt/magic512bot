@@ -3,9 +3,30 @@ steps:
     commands: 
       - .buildkite/build.sh
     plugins:
-      - docker-login#v2.0.1:
-          username: bassmatt
-          password-env: DOCKER_PASSWORD
+      - kubernetes:
+        sidecars:
+          - image: docker:dind
+            command: [dockerd-entrypoint.sh]
+            env:
+              - name: DOCKER_TLS_CERTDIR
+                value: ""
+            volumeMounts:
+              - mountPath: /var/run/
+                name: docker-sock
+            securityContext:
+              privileged: true
+              allowPrivilegeEscalation: true
+        mirrorVolumeMounts: true
+        podSpec:
+          containers:
+            - image: alpine/docker-with-buildx:latest
+              volumeMounts:
+                - mountPath: /var/run/
+                  name: docker-sock
+              command: ./buildkite/build.sh
+          volumes:
+          - name: docker-sock
+            emptyDir: {}
     agents:
       queue: kubernetes
 
