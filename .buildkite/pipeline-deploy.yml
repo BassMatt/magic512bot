@@ -23,8 +23,9 @@ steps:
                 volumeMounts:
                   - mountPath: /var/run/
                     name: docker-sock
-                command: 
-                  - .buildkite/build.sh
+                commands: 
+                  - ls
+                  - pwd
             volumes:
             - name: docker-sock
               emptyDir: {}
