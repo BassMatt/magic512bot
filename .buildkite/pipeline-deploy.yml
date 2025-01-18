@@ -5,17 +5,17 @@ steps:
     plugins:
       - kubernetes:
           sidecars:
-            - image: docker:dind
-              command: [dockerd-entrypoint.sh]
-              env:
-                - name: DOCKER_TLS_CERTDIR
-                  value: ""
-              volumeMounts:
-                - mountPath: /var/run/
-                  name: docker-sock
-              securityContext:
-                privileged: true
-                allowPrivilegeEscalation: true
+          - image: docker:dind
+            command: [dockerd-entrypoint.sh]
+            env:
+              - name: DOCKER_TLS_CERTDIR
+                value: ""
+            volumeMounts:
+              - mountPath: /var/run/
+                name: docker-sock
+            securityContext:
+              privileged: true
+              allowPrivilegeEscalation: true
           mirrorVolumeMounts: true
           podSpec:
             containers:
@@ -24,7 +24,7 @@ steps:
                   - mountPath: /var/run/
                     name: docker-sock
                 command:
-                  - .buildkite/build.sh
+                  - sleep 100000
             volumes:
             - name: docker-sock
               emptyDir: {}
