@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 DOCKER_USERNAME=bassmatt
 APPLICATION_NAME=magic512bot
 GIT_HASH=$(git log --format="%h" -n 1)
