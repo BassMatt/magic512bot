@@ -2,9 +2,8 @@ steps:
   - block: "wait for ssh"
   - label: "Build & Push"
     commands: 
-      - "make build"
-      - "make push"
       - "sleep 10000"
+      - .buildkite/build.sh
     #plugins:
     #  - docker-login#v2.0.1:
     #      username: bassmatt
