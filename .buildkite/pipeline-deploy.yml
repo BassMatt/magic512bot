@@ -1,34 +1,32 @@
 steps:
   - label: "Build & Push"
-    commands: 
-      - .buildkite/build.sh
+    agents:
+      queue: kubernetes
     plugins:
       - kubernetes:
-        sidecars:
-          - image: docker:dind
-            command: [dockerd-entrypoint.sh]
-            env:
-              - name: DOCKER_TLS_CERTDIR
-                value: ""
-            volumeMounts:
-              - mountPath: /var/run/
-                name: docker-sock
-            securityContext:
-              privileged: true
-              allowPrivilegeEscalation: true
-        mirrorVolumeMounts: true
-        podSpec:
-          containers:
-            - image: alpine/docker-with-buildx:latest
+          sidecars:
+            - image: docker:dind
+              command: [dockerd-entrypoint.sh]
+              env:
+                - name: DOCKER_TLS_CERTDIR
+                  value: ""
               volumeMounts:
                 - mountPath: /var/run/
                   name: docker-sock
-              command: ./buildkite/build.sh
-          volumes:
-          - name: docker-sock
-            emptyDir: {}
-    agents:
-      queue: kubernetes
+              securityContext:
+                privileged: true
+                allowPrivilegeEscalation: true
+          mirrorVolumeMounts: true
+          podSpec:
+            containers:
+              - image: alpine/docker-with-buildx:latest
+                volumeMounts:
+                  - mountPath: /var/run/
+                    name: docker-sock
+                command: .buildkite/build.sh
+            volumes:
+            - name: docker-sock
+              emptyDir: {}
 
   - wait
 
