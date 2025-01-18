@@ -1,5 +1,0 @@
-steps:
-  - label: "Example Test"
-    command: echo "Hello2!"
-    agents:
-      queue: kubernetes
