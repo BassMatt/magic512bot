@@ -4,34 +4,30 @@ steps:
       queue: kubernetes
     plugins:
       - kubernetes:
-          sidecars:
-          - image: docker:dind
-            command: [dockerd-entrypoint.sh]
-            env:
-              - name: DOCKER_TLS_CERTDIR
-                value: ""
-            volumeMounts:
-              - mountPath: /var/run/
-                name: docker-sock
-            securityContext:
-              privileged: true
-              allowPrivilegeEscalation: true
-          mirrorVolumeMounts: true
           podSpec:
             containers:
-              - image: alpine/docker-with-buildx:latest
+              - name: kaniko
+                image: gcr.io/kaniko-project/executor:latest
+                args: ["--dockerfile=/workspace/build/buildkite/bassmatt/magic512bot/Dockerfile",
+                        "--context=dir://workspace/build/buildkite/bassmatt/magic512bot",
+                        "--destination=bassmatt/magic512bot"] # replace with your dockerhub account
                 volumeMounts:
-                  - mountPath: /var/run/
-                    name: docker-sock
-                command:
-                  - sleep 10000
-                  # - .buildkite/build.sh
+                  - name: kaniko-secret
+                    mountPath: /kaniko/.docker
+                  - name: dockerfile-storage
+                    mountPath: /workspace
+            restartPolicy: Never
             volumes:
-            - name: docker-sock
-              emptyDir: {}
-
+              - name: kaniko-secret
+                secret:
+                  secretName: regcred
+                  items:
+                    - key: .dockerconfigjson
+                      path: config.json
+              - name: dockerfile-storage
+                persistentVolumeClaim:
+                  claimName: dockerfile-claim
   - wait
-
   - label: "Deploy to Kubernetes"
     command: .buildkite/buildkite-deploy
     concurrency: 1

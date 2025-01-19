@@ -31,7 +31,6 @@ RUN python -m venv $VIRTUAL_ENV
 
 # working directory and Python path
 WORKDIR /app
-ENV PYTHONPATH="/app:$PYTHONPATH"
 
 ################################
 # BUILDER-BASE
