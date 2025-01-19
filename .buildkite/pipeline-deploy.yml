@@ -16,7 +16,7 @@ steps:
             securityContext:
               privileged: true
               allowPrivilegeEscalation: true
-          mirrorVolumeMounts: true
+            mirrorVolumeMounts: true
           podSpec:
             containers:
               - image: alpine/docker-with-buildx:latest
