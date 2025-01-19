@@ -8,14 +8,14 @@ steps:
             containers:
               - name: kaniko
                 image: gcr.io/kaniko-project/executor:latest
+                command:
+                - executor
                 args: ["--dockerfile=./Dockerfile",
                         "--context=dir://workspace/build/buildkite/bassmatt/magic512bot",
                         "--destination=bassmatt/magic512bot"] # replace with your dockerhub account
                 volumeMounts:
                   - name: kaniko-secret
                     mountPath: /kaniko/.docker
-                  - name: dockerfile-storage
-                    mountPath: /workspace/
             restartPolicy: Never
             volumes:
               - name: kaniko-secret
@@ -24,9 +24,6 @@ steps:
                   items:
                     - key: .dockerconfigjson
                       path: config.json
-              - name: dockerfile-storage
-                persistentVolumeClaim:
-                  claimName: dockerfile-claim
   - wait
   - label: "Deploy to Kubernetes"
     command: .buildkite/buildkite-deploy
