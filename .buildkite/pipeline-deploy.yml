@@ -8,14 +8,14 @@ steps:
             containers:
               - name: kaniko
                 image: gcr.io/kaniko-project/executor:latest
-                args: ["--dockerfile=/workspace/build/buildkite/bassmatt/magic512bot/Dockerfile",
+                args: ["--dockerfile=./Dockerfile",
                         "--context=dir://workspace/build/buildkite/bassmatt/magic512bot",
                         "--destination=bassmatt/magic512bot"] # replace with your dockerhub account
                 volumeMounts:
                   - name: kaniko-secret
                     mountPath: /kaniko/.docker
                   - name: dockerfile-storage
-                    mountPath: /workspace
+                    mountPath: /workspace/
             restartPolicy: Never
             volumes:
               - name: kaniko-secret
