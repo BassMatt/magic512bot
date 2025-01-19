@@ -24,7 +24,7 @@ steps:
                   - mountPath: /var/run/
                     name: docker-sock
                 command:
-                  - sleep 100000
+                  - .buildkite/build.sh
             volumes:
             - name: docker-sock
               emptyDir: {}
