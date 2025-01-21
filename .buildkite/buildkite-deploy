@@ -4,8 +4,6 @@ set -euo pipefail
 
 DOCKER_IMAGE=bassmatt/magic512bot:latest
 
-docker pull $DOCKER_IMAGE
-
 manifest="$(mktemp)"
 
 echo '--- :kubernetes: Shipping'
