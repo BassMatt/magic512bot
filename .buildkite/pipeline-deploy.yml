@@ -10,8 +10,8 @@ steps:
                 image: gcr.io/kaniko-project/executor:debug
                 command:
                 - executor
-                args: ["--dockerfile=./Dockerfile",
-                        "--context=dir://workspace/build/buildkite/bassmatt",
+                args: ["--dockerfile=/workspace/build/buildkite/bassmatt/magic512bot/Dockerfile",
+                        "--context=dir://workspace/build/buildkite/bassmatt/magic512bot",
                         "--destination=bassmatt/magic512bot",
                         "--ignore-path=/product_uuid"] # issue2164
                 volumeMounts:
