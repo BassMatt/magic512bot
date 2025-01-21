@@ -2,9 +2,7 @@
 
 set -euo pipefail
 
-DOCKER_IMAGE=bassmatt/magic512bot:latest
-
-manifest="$(mktemp)"
+manifest="deployment.yml"
 
 echo '--- :kubernetes: Shipping'
 
