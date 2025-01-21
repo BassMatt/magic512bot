@@ -6,7 +6,6 @@ manifest="deployment.yml"
 
 echo '--- :kubernetes: Shipping'
 
-envsubst < deployment.yml > "${manifest}"
 kubectl apply -f "${manifest}"
 
 echo '--- :zzz: Waiting for deployment'
