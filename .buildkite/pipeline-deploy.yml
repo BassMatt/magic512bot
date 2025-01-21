@@ -12,7 +12,8 @@ steps:
                 - executor
                 args: ["--dockerfile=./Dockerfile",
                         "--context=dir://workspace/build/buildkite/bassmatt/magic512bot",
-                        "--destination=bassmatt/magic512bot"] # replace with your dockerhub account
+                        "--destination=bassmatt/magic512bot",
+                        "--ignore-path=/product_uuid"] # issue2164
                 volumeMounts:
                   - name: kaniko-secret
                     mountPath: /kaniko/.docker
