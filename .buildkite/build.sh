@@ -6,6 +6,6 @@ GIT_HASH=$(git log --format="%h" -n 1)
 
 sleep 20 # sidecar takes a while to start up
 
-docker build --tag ${DOCKER_USERNAME}/${APPLICATION_NAME}:${GIT_HASH} .
+docker build --tag ${DOCKER_USERNAME}/${APPLICATION_NAME}:${GIT_HASH} --tag ${DOCKER_USERNAME}/${APPLICATION_NAME}:latest .
 
-docker push ${DOCKER_USERNAME}/${APPLICATION_NAME}:${GIT_HASH}
+docker push ${DOCKER_USERNAME}/${APPLICATION_NAME}:latest

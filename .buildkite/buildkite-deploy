@@ -12,8 +12,6 @@ manifest="deployment.yml"
 
 echo '--- :kubernetes: Shipping'
 
-sleep 1000
-
 kubectl apply -f "${manifest}"
 
 echo '--- :zzz: Waiting for deployment'
