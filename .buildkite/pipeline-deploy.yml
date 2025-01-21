@@ -7,12 +7,13 @@ steps:
           podSpec:
             containers:
               - name: kaniko
-                image: gcr.io/kaniko-project/executor:debug
+                #image: gcr.io/kaniko-project/executor:debug
+                image: busybox
                 command:
-                - executor
-                args: ["--dockerfile=./Dockerfile",
-                        "--context=dir://workspace/build/buildkite/bassmatt/magic512bot",
-                        "--destination=bassmatt/magic512bot"] # replace with your dockerhub account
+                - sleep 1000
+                #args: ["--dockerfile=./Dockerfile",
+                #        "--context=dir://workspace/build/buildkite/bassmatt/magic512bot",
+                #        "--destination=bassmatt/magic512bot"] # replace with your dockerhub account
                 volumeMounts:
                   - name: kaniko-secret
                     mountPath: /kaniko/.docker
@@ -21,6 +22,7 @@ steps:
               - name: kaniko-secret
                 secret:
                   secretName: regcred
+                  namespace: buildkite
                   items:
                     - key: .dockerconfigjson
                       path: config.json
