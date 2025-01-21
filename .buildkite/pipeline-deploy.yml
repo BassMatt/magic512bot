@@ -4,29 +4,33 @@ steps:
       queue: kubernetes
     plugins:
       - kubernetes:
+          sidecars:
+          - image: docker:dind
+            command: [dockerd-entrypoint.sh]
+            env:
+              - name: DOCKER_TLS_CERTDIR
+                value: ""
+            volumeMounts:
+              - mountPath: /var/run/
+                name: docker-sock
+            securityContext:
+              privileged: true
+              allowPrivilegeEscalation: true
+          mirrorVolumeMounts: true
           podSpec:
             containers:
-              - name: kaniko
-                image: gcr.io/kaniko-project/executor:debug
-                command:
-                - executor
-                args: ["--dockerfile=build/buildkite/bassmatt/magic512bot/Dockerfile",
-                        "--context=dir://./",
-                        "--destination=bassmatt/magic512bot",
-                        "--ignore-path=/product_uuid"] # issue2164
+              - image: alpine/docker-with-buildx:latest
                 volumeMounts:
-                  - name: kaniko-secret
-                    mountPath: /kaniko/.docker
-            restartPolicy: Never
+                  - mountPath: /var/run/
+                    name: docker-sock
+                command:
+                  - .buildkite/build.sh
             volumes:
-              - name: kaniko-secret
-                secret:
-                  secretName: regcred
-                  namespace: buildkite
-                  items:
-                    - key: .dockerconfigjson
-                      path: config.json
+            - name: docker-sock
+              emptyDir: {}
+
   - wait
+
   - label: "Deploy to Kubernetes"
     command: .buildkite/buildkite-deploy
     concurrency: 1

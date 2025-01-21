@@ -4,6 +4,7 @@ DOCKER_USERNAME=bassmatt
 APPLICATION_NAME=magic512bot
 GIT_HASH=$(git log --format="%h" -n 1)
 
+sleep 10
 
 docker build --tag ${DOCKER_USERNAME}/${APPLICATION_NAME}:${GIT_HASH} .
 
