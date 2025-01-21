@@ -11,7 +11,7 @@ steps:
                 command:
                 - executor
                 args: ["--dockerfile=./Dockerfile",
-                        "--context=dir://workspace/build/buildkite/bassmatt/magic512bot",
+                        "--context=dir://workspace/build/buildkite",
                         "--destination=bassmatt/magic512bot",
                         "--ignore-path=/product_uuid"] # issue2164
                 volumeMounts:
