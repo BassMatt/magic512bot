@@ -23,7 +23,7 @@ steps:
                 volumeMounts:
                   - mountPath: /var/run/
                     name: docker-sock
-                  - mountPath: /root/.docker/config.json
+                  - mountPath: /root/.docker
                     name: dockerhub-cred
                 command:
                   - .buildkite/build.sh
