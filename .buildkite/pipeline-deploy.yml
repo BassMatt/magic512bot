@@ -23,11 +23,20 @@ steps:
                 volumeMounts:
                   - mountPath: /var/run/
                     name: docker-sock
+                  - mountPath: /.docker/config.json
+                    name: dockerhub-cred
                 command:
                   - .buildkite/build.sh
             volumes:
             - name: docker-sock
               emptyDir: {}
+            - name: dockerhub-cred
+              secret:
+                secretName: regcred
+                namespace: buildkite
+                items:
+                  - key: .dockerconfigjson
+                    path: config.json
 
   - wait
 
