@@ -19,5 +19,12 @@ spec:
         - name: app
           image: bassmatt/magic512bot:latest
           envFrom:
-          - secretRef:
-            name: magic-512-bot-creds
+            - secretRef:
+                name: magic-512-bot-creds
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m" 
