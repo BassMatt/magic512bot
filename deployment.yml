@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: app
-          image: bassmatt/magic512bot:latest
+          image: "${DOCKER_IMAGE}"
           envFrom:
             - secretRef:
                 name: magic-512-bot-creds

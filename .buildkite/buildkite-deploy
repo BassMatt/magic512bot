@@ -7,11 +7,16 @@ curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s htt
 chmod +x ./kubectl
 mv ./kubectl /bin
 
+# envsubst needed for enforcing manifest
+apk add envsubst
 
-manifest="deployment.yml"
+export DOCKER_IMAGE="bassmatt/magic512bot:${BUILDKITE_BUILD_NUMBER}"
+
+manifest="$(mktemp)"
 
 echo '--- :kubernetes: Shipping'
 
+envsubst < deployment.yml > "${manifest}"
 kubectl apply -f "${manifest}"
 
 echo '--- :zzz: Waiting for deployment'
