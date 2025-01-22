@@ -44,5 +44,10 @@ steps:
     command: .buildkite/buildkite-deploy
     concurrency: 1
     concurrency_group: deploy/prod
+    plugins:
+      - kubernetes:
+          podSpec:
+            containers:
+              - image: alpine:latest
     agents:
       queue: kubernetes
