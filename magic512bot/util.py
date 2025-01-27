@@ -1,5 +1,5 @@
 from errors import CardListInputError
-from models import CardLoan
+from database import CardLoan
 from collections import Counter
 from table2ascii import table2ascii, Alignment, PresetStyle
 
