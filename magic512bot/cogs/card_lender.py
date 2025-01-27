@@ -58,7 +58,7 @@ class ReturnCardLoansModal(discord.ui.Modal, title='LoanList'):
         super().__init__(title='LoanList')
 
     async def on_submit(self, interaction: discord.Interaction):
-        cards_returned = db.return_cardloans(
+        cards_returned = await return_cardloans(
             card_list=self.loanlist.value.split("\n"), 
             lender=interaction.user.id, 
             borrower=self.borrower.id, 
