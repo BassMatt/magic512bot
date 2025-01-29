@@ -1,37 +1,37 @@
 import config
-import datetime
-from sqlalchemy import Integer, String, DateTime, BigInteger, ARRAY
-from sqlalchemy.orm import sessionmaker, declarative_base, mapped_column, Mapped
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from typing import List, AsyncGenerator
+from sqlalchemy import inspect, create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
+from config import logger
 
-engine=create_async_engine(config.DB_CONNECTION_STRING, echo=True)
-AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+engine=create_engine(config.DB_CONNECTION_STRING, echo=True)
+SessionLocal = sessionmaker(bind=engine)
 
 Base = declarative_base()
 
-class CardLoan(Base):
-    __tablename__ = 'card_loans'
-    id: Mapped[int] = mapped_column(Integer(), nullable=False, primary_key=True)
-    card: Mapped[str] = mapped_column(String(100), nullable=False) # for now, just have cards as names
-    lender: Mapped[int] = mapped_column(BigInteger(), nullable=False) # discord user id of lender
-    borrower: Mapped[int] = mapped_column(BigInteger(), nullable=False) # discord user id of borrower
-    borrower_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    quantity: Mapped[int] = mapped_column(Integer(), nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(), nullable=False)
-    order_tag: Mapped[str] = mapped_column(String(100), nullable=False) # order tag, if not specified defaults to ""
-
-class Users(Base):
-    __tablename__ = 'users'
-    id: Mapped[int] = mapped_column(Integer(), nullable=False, primary_key=True)
-    user_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    user_id: Mapped[int] = mapped_column(BigInteger(), nullable=False) # discord user id
-    roles: Mapped[List[str]] = mapped_column(ARRAY(String), nullable=False)
-
-async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with AsyncSessionLocal() as session:
-        yield session
+def init_db():
+    """
+    Initialize the database, creating tables only if they don't exist.
+    Returns True if successful, False if there was an error.
+    """
+    inspector = inspect(engine)
+    
+    try:
+        # Get all table names from your models
+        model_tables = Base.metadata.tables.keys()
+        existing_tables = inspector.get_table_names()
+        
+        # Check which tables need to be created
+        tables_to_create = set(model_tables) - set(existing_tables)
+        
+        if tables_to_create:
+            logger.info(f"🏗️ Creating missing tables: {tables_to_create}")
+            Base.metadata.create_all(bind=engine)
+            logger.info("✨ Tables created successfully!")
+        else:
+            logger.info("👍 All tables already exist!")
+            
+        return True
+        
+    except Exception as e:
+        logger.error(f"💥 Database initialization failed: {str(e)}")
+        return False

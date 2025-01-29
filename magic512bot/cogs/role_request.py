@@ -2,8 +2,7 @@ from enum import StrEnum
 import discord
 from discord import app_commands
 from discord.ext import commands
-from config import MODERATOR_CHANNEL_ID
-
+from config import ROLE_REQUEST_CHANNEL_ID
 
 class Roles(StrEnum):
     MOD = "Mod"
@@ -72,7 +71,7 @@ async def send_role_request_embed(interaction: discord.Interaction, role_name: s
     embed.set_author(name=interaction.user.name, icon_url=interaction.user.avatar.url)
     embed.set_footer(text=f"User ID: {interaction.user.id}")
 
-    channel = interaction.guild.get_channel(MODERATOR_CHANNEL_ID)
+    channel = interaction.guild.get_channel(ROLE_REQUEST_CHANNEL_ID)
     view = discord.ui.View()
     view.add_item(ApproveButton())
     await channel.send(embed=embed, view=view)

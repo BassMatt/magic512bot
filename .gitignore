@@ -3,3 +3,4 @@ card_lender/__pycache__
 .vscode/
 db1.db
 __pycache__/
+bot.log

@@ -23,6 +23,7 @@ ENV VIRTUAL_ENV=/app/.venv \
 
 COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 
-COPY ./magic512bot ./magic512bot
+COPY ./magic512bot /magic512bot
+WORKDIR /magic512bot
 
-ENTRYPOINT ["python", "magic512bot/main.py"]
+ENTRYPOINT ["python", "main.py"]
