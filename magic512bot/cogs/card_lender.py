@@ -5,14 +5,13 @@ from discord import app_commands
 from discord.ext  import commands
 from errors import CardListInputError, CardNotFoundError
 from util import parse_cardlist
-from database import CardLoan, get_db
+from database import CardLoan
 import datetime
-
+from config import logger
 from sqlalchemy import select, delete
-
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from util import format_loanlist_output, format_bulk_loanlist_output
-from magic512bot.cogs.role_request import Roles
+from cogs.role_request import Roles
 
 class InsertCardLoansModal(discord.ui.Modal, title='LoanList'):
     loanlist = discord.ui.TextInput(
@@ -22,13 +21,15 @@ class InsertCardLoansModal(discord.ui.Modal, title='LoanList'):
             max_length=1000,
             placeholder="1 Sheoldred, the Apocalypse\n3 Ketria Triome\n..."
     )
-    def __init__(self, borrower: discord.Member, tag: str = ""):
+    def __init__(self, db_session: AsyncSession, borrower: discord.Member, tag: str = ""):
+        self.db = db
         self.borrower = borrower 
         self.tag = tag
         super().__init__(title='LoanList')
 
     async def on_submit(self, interaction: discord.Interaction):
         cards_loaned = await insert_cardloans(
+            db=self.db,
             card_list=self.loanlist.value.split("\n"), 
             lender=interaction.user.id, 
             borrower=self.borrower.id,
@@ -41,7 +42,7 @@ class InsertCardLoansModal(discord.ui.Modal, title='LoanList'):
         if isinstance(error, CardListInputError):
             await interaction.response.send_message(str(error), ephemeral=True)
         else:
-            print(traceback.format_exc())
+            logger.info(traceback.format_exc())
             await interaction.response.send_message('Oops! Something went wrong.', ephemeral=True)
 
 class ReturnCardLoansModal(discord.ui.Modal, title='LoanList'):
@@ -52,13 +53,15 @@ class ReturnCardLoansModal(discord.ui.Modal, title='LoanList'):
             max_length=1000,
             placeholder="1 Sheoldred, the Apocalypse\n3 Ketria Triome\n..."
     )
-    def __init__(self, borrower: discord.Member, tag: str = ""):
+    def __init__(self, db_session: AsyncSession, borrower: discord.Member, tag: str = ""):
+        self.db = db
         self.borrower = borrower 
         self.tag = tag
         super().__init__(title='LoanList')
 
     async def on_submit(self, interaction: discord.Interaction):
         cards_returned = await return_cardloans(
+            db=self.db,
             card_list=self.loanlist.value.split("\n"), 
             lender=interaction.user.id, 
             borrower=self.borrower.id, 
@@ -73,21 +76,22 @@ class ReturnCardLoansModal(discord.ui.Modal, title='LoanList'):
         elif isinstance(error, CardNotFoundError):
             await interaction.response.send_message(str(error), ephemeral=True)
         else:
-            print(traceback.format_exc())
+            logger.info(traceback.format_exc())
             await interaction.response.send_message('Oops! Something went wrong.', ephemeral=True)
 
 class CardLender(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        logger.info("CardLender Cog Initialized")
 
     @app_commands.command(name="loan", description="Loan a card")
     @app_commands.checks.has_role(Roles.TEAM.value)
-    @app_commands.rename(borrower='to')
     @app_commands.describe(
         borrower='Team member you wish to lend cards to',
         tag='Order tag for bulk returning cards')
+    @app_commands.rename(borrower='to')
     async def loan_handler(self, interaction: discord.Interaction, borrower: discord.Member, tag: Optional[str] = ""):
-        loan_modal = InsertCardLoansModal(borrower, tag)
+        loan_modal = InsertCardLoansModal(self.bot.db, borrower, tag)
         await interaction.response.send_modal(loan_modal)
 
     @app_commands.command(name="return", description="Return a card")
@@ -96,8 +100,8 @@ class CardLender(commands.Cog):
         borrower='@mention member that is returning the loaned cards',
         tag='Return cards with a given order tag')
     @app_commands.rename(borrower="from")
-    async def return_card_handler(interaction: discord.Interaction, borrower: discord.Member, tag: Optional[str] = ""):
-        return_modal = ReturnCardLoansModal(borrower, tag)
+    async def return_card_handler(self, interaction: discord.Interaction, borrower: discord.Member, tag: Optional[str] = ""):
+        return_modal = ReturnCardLoansModal(self.bot.db, borrower, tag)
         await interaction.response.send_modal(return_modal)
 
     @app_commands.command(name="bulkreturn", description="Return many cards")
@@ -106,8 +110,8 @@ class CardLender(commands.Cog):
         borrower="@mention member that is returning the loaned cards",
         tag="Return cards with a given order tag")
     @app_commands.rename(borrower="from")
-    async def bulk_return_Cards_handler(interaction: discord.Interaction, borrower: discord.Member, tag: Optional[str] = ""):
-        returned_count = await bulk_return_cardloans(lender=interaction.user.id, borrower=borrower.id, tag=tag)
+    async def bulk_return_Cards_handler(self, interaction: discord.Interaction, borrower: discord.Member, tag: Optional[str] = ""):
+        returned_count = await bulk_return_cardloans(db=self.bot.db, lender=interaction.user.id, borrower=borrower.id, tag=tag)
         await interaction.response.send_message(
             f"{borrower.mention} returned **{returned_count}** cards to {interaction.user.mention}.", 
             allowed_mentions=discord.AllowedMentions.none())
@@ -118,21 +122,21 @@ class CardLender(commands.Cog):
         borrower="@mention member that is borrowing the cards",
         tag="Query for cards with given order tag")
     @app_commands.rename(borrower="to")
-    async def get_loans_handler(interaction: discord.Interaction, borrower: discord.Member, tag: Optional[str] = ""):
-        results = await get_cardloans(lender=interaction.user.id, borrower=borrower.id, tag=tag)
+    async def get_loans_handler(self, interaction: discord.Interaction, borrower: discord.Member, tag: Optional[str] = ""):
+        results = await get_cardloans(db=self.bot.db, lender=interaction.user.id, borrower=borrower.id, tag=tag)
         response = f"{interaction.user.mention} has loaned **{sum(card.quantity for card in results)}** card(s) to {borrower.mention}\n\n"
         response += "```\n"+ format_loanlist_output(results) + "```"
         await interaction.response.send_message(response, allowed_mentions=discord.AllowedMentions.none())
 
     @app_commands.command(name="bulkgetloans", description="Check loans from all borrowers")
     @app_commands.checks.has_role(Roles.TEAM.value)
-    async def bulk_get_loans_handler(interaction: discord.Interaction):
-        results = await bulk_get_cardloans(lender=interaction.user.id)
+    async def bulk_get_loans_handler(self, interaction: discord.Interaction):
+        results = await bulk_get_cardloans(db=self.bot.db, lender=interaction.user.id)
         response = "```\n" + format_bulk_loanlist_output(results) + "```"
         await interaction.response.send_message(response)
 
 
-async def insert_cardloans(card_list: list[str], lender: int, borrower: int, borrower_name: str, tag: str = "") -> int:
+async def insert_cardloans(db_session: AsyncSession, card_list: list[str], lender: int, borrower: int, borrower_name: str, tag: str = "") -> int:
     """
     Upserts Loan Objects into database based on if (Card Name + Tag) is already present
 
@@ -152,13 +156,13 @@ async def insert_cardloans(card_list: list[str], lender: int, borrower: int, bor
         ))
 
     cards_added = sum(card.quantity for card in card_loans) 
-    async for session in get_db():
-        session.add_all(card_loans)
-        await session.commit()
+    async with db_session.begin():
+        db_session.add_all(card_loans)
+        await db_session.commit()
     
     return cards_added
 
-async def bulk_return_cardloans(lender: int, borrower: int, tag: str = "") -> int:
+async def bulk_return_cardloans(db_session: AsyncSession, lender: int, borrower: int, tag: str = "") -> int:
     """
     Removes rows from card_loans table for a given lender
     based on if they match either of the two given parameters
@@ -166,17 +170,17 @@ async def bulk_return_cardloans(lender: int, borrower: int, tag: str = "") -> in
     If no borrower / tag is specified, deletes all rows for a given lender.
     """
     affected_row_count = 0
-    async for session in get_db():
+    async with db_session.begin():
         stmt = delete(CardLoan).where(
             CardLoan.lender == lender,
             CardLoan.borrower == borrower)
         if tag:
             stmt.where(CardLoan.order_tag == tag)
         
-        affected_row_count = len(await session.execute(stmt).fetchall())
+        affected_row_count = len(await db_session.execute(stmt).fetchall())
     return affected_row_count
 
-async def return_cardloans(card_list: list[str], lender: int, borrower: int, tag: str) -> int:
+async def return_cardloans(db_session: AsyncSession, card_list: list[str], lender: int, borrower: int, tag: str) -> int:
     """
     Decrements quantity for each given card in card_list matching given parameters. If
     multiple rows are returned for a given card, decrements earliest matching rows first.
@@ -191,7 +195,7 @@ async def return_cardloans(card_list: list[str], lender: int, borrower: int, tag
     not_found_errors = []
     total_return_count = 0
 
-    async for session in get_db():
+    async with db_session.begin():
         for card_name, quantity_to_return in loans_to_return.items():
             card_query_stmt = select(CardLoan).where(
                 CardLoan.card == card_name,
@@ -200,7 +204,7 @@ async def return_cardloans(card_list: list[str], lender: int, borrower: int, tag
             if tag:
                 card_query_stmt = card_query_stmt.where(CardLoan.order_tag == tag)
             
-            result: List[CardLoan] = await session.scalars(card_query_stmt.order_by(CardLoan.created_at)).all()
+            result: List[CardLoan] = await db_session.scalars(card_query_stmt.order_by(CardLoan.created_at)).all()
             total_loaned_count = sum(card_loan.quantity for card_loan in result)
 
             if total_loaned_count < quantity_to_return:
@@ -211,7 +215,7 @@ async def return_cardloans(card_list: list[str], lender: int, borrower: int, tag
                 if card_loan.quantity < quantity_to_return:
                     total_return_count += card_loan.quantity
                     quantity_to_return -= card_loan.quantity
-                    await session.delete(card_loan)
+                    await db_session.delete(card_loan)
                 else:
                     card_loan.quantity -= quantity_to_return
                     total_return_count += quantity_to_return
@@ -222,7 +226,7 @@ async def return_cardloans(card_list: list[str], lender: int, borrower: int, tag
 
         return total_return_count 
 
-async def get_cardloans(lender: int, borrower: int, tag: str) -> list[CardLoan]:
+async def get_cardloans(db_session: AsyncSession, lender: int, borrower: int, tag: str) -> list[CardLoan]:
     """
     Returns a list of CardLoan objects that match the given parameters
     """
@@ -231,24 +235,24 @@ async def get_cardloans(lender: int, borrower: int, tag: str) -> list[CardLoan]:
     if tag:
         statement = statement.where(CardLoan.order_tag == tag)
 
-    async for session in get_db():
-        result = await session.scalars(statement).all()
+    async with db_session.begin():
+        result = await db_session.scalars(statement).all()
         return list(result)
 
-async def bulk_get_cardloans(lender: int):
+async def bulk_get_cardloans(db_session: AsyncSession, lender: int):
     """
     Returns the list of all CardLoan objects for a given lender 
     """
-    async for session in get_db():
+    async with db_session.begin():
         statement = select(CardLoan).where(CardLoan.lender == lender)
-        result = await session.scalars(statement).all()
+        result = await db_session.scalars(statement).all()
         return list(result)
 
-async def delete_all_cardloans():
-    async for session in get_db():
+async def delete_all_cardloans(db_session: AsyncSession):
+    async with db_session.begin():
         statement = delete(CardLoan)
-        result = await session.execute(statement)
-        print(result.rowcount)
+        result = await db_session.execute(statement)
+        logger.info(result.rowcount)
 
 async def setup(bot):
     await bot.add_cog(CardLender(bot))
