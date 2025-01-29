@@ -4,3 +4,4 @@ card_lender/__pycache__
 db1.db
 __pycache__/
 bot.log
+.pytest_cache
