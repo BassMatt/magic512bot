@@ -4,7 +4,6 @@ from discord import app_commands
 from discord.ext import commands
 from config import ROLE_REQUEST_CHANNEL_ID
 
-
 class Roles(StrEnum):
     MOD = "Mod"
 
