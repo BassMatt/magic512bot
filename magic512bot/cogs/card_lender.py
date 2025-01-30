@@ -45,9 +45,9 @@ class InsertCardLoansModal(discord.ui.Modal, title="LoanList"):
                 borrower_name=self.borrower.display_name,
                 tag=self.tag,
             )
-            message = f"{
-                interaction.user.mention} loaned **{cards_loaned}** cards to {
-                self.borrower.mention}"
+            message = f"{interaction.user.mention} \
+                loaned **{cards_loaned}** cards to \
+                {self.borrower.mention}"
             await interaction.response.send_message(
                 message, allowed_mentions=discord.AllowedMentions.none()
             )
@@ -199,11 +199,9 @@ class CardLender(commands.Cog):
                 borrower=borrower.id,
                 tag=tag if tag is not None else "",
             )
-            response = f"{
-                interaction.user.mention} has loaned **{
-                sum(
-                    card.quantity for card in results)}** card(s) to {
-                borrower.mention}\n\n"
+            card_sum = sum(card.quantity for card in results)
+            response = f"{interaction.user.mention} has loaned \
+                **{card_sum}** card(s) to {borrower.mention}\n\n"
             response += "```\n" + format_loanlist_output(results) + "```"
             await interaction.response.send_message(
                 response, allowed_mentions=discord.AllowedMentions.none()
