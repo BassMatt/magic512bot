@@ -1,7 +1,8 @@
-from sqlalchemy import Integer, String, DateTime, BigInteger
-from sqlalchemy.orm import mapped_column, Mapped
 import datetime
+
 from database import Base
+from sqlalchemy import BigInteger, DateTime, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column
 
 
 class CardLoan(Base):
