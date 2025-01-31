@@ -1,4 +1,5 @@
 from enum import StrEnum
+from typing import List
 
 import discord
 from config import LOGGER, ROLE_REQUEST_CHANNEL_ID
@@ -230,7 +231,7 @@ class RoleRequest(commands.Cog):
     def __init__(self, bot):
         self.bot: Magic512Bot = bot
 
-    @app_commands.command(name="give-monarch")
+    @app_commands.command(name="monarch-assign")
     @app_commands.describe(to="the team member who will receive Monarch")
     @app_commands.checks.has_role(Roles.THE_MONARCH.value)
     @app_commands.guild_only()
@@ -277,15 +278,34 @@ class RoleRequest(commands.Cog):
             ephemeral=False,
         )
 
-    @app_commands.command(name="request-role")
+    async def role_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> List[app_commands.Choice[str]]:
+        # List of allowed role names
+        return [
+            app_commands.Choice(name=role, value=role)
+            for role in ALLOWED_ROLE_REQUESTS.keys()
+            if current.lower() in role.lower()
+        ]
+
+    @app_commands.command(name="role-request")
     @app_commands.describe(
-        role="The Sweat role you want to request",
+        role_name="The Sweat role you want to request",
         reason="Brief description of how you earned it",
     )
+    @app_commands.rename(role_name="role")
+    @app_commands.autocomplete(role_name=role_autocomplete)
     @app_commands.guild_only()
     async def request_role(
-        self, interaction: discord.Interaction, role: discord.Role, reason: str
+        self, interaction: discord.Interaction, role_name: str, reason: str
     ) -> None:
+        if not (guild := interaction.guild):
+            await interaction.response.send_message(
+                "Unable to obtain guild object where request made", ephemeral=True
+            )
+            return
 
         # Explicitly cast interaction.user to Member
         if not isinstance(interaction.user, discord.Member):
@@ -295,9 +315,16 @@ class RoleRequest(commands.Cog):
             return
 
         # Check if role has "Sweat" in the name
-        if role.name not in ALLOWED_ROLE_REQUESTS.keys():
+        if role_name not in ALLOWED_ROLE_REQUESTS.keys():
             await interaction.response.send_message(
                 "❌ You can only request Format Sweat roles!",
+                ephemeral=True,
+            )
+            return
+
+        if not (role := discord.utils.get(guild.roles, name=role_name)):
+            await interaction.response.send_message(
+                "Unable to find role requested. Did you specify a sweat role?",
                 ephemeral=True,
             )
             return
@@ -323,11 +350,7 @@ class RoleRequest(commands.Cog):
         embed.add_field(name="Reason", value=reason, inline=False)
 
         # Get moderator channel
-        if not (guild := interaction.guild):
-            await interaction.response.send_message(
-                "Unable to obtain guild object where request made", ephemeral=True
-            )
-            return
+
         role_request_channel = guild.get_channel(ROLE_REQUEST_CHANNEL_ID)
         if not role_request_channel or not isinstance(
             role_request_channel, discord.TextChannel
