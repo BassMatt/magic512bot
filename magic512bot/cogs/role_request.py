@@ -77,66 +77,32 @@ class RoleRequestView(discord.ui.View):
         if requested_role and member:
             try:
                 db_roles = None
+                LOGGER.info("Getting Users DB Roles")
                 with self.db.begin() as session:
                     db_roles = set(get_user_roles(session=session, user_id=member.id))
 
-                db_roles_to_add = []
+                LOGGER.info(f"{len(db_roles)} Users DB Roles Found")
+                db_roles_to_add: list[str] = []
 
                 # 1. Read-Repair on the Database with Roles
                 for role in member.roles:
-                    if role.name not in db_roles:
+                    if (
+                        role.name in ALLOWED_ROLE_REQUESTS.keys()
+                        and role.name not in db_roles
+                    ):
                         db_roles_to_add.append(role.name)
 
                 # 3. Add role to database
                 db_roles_to_add.append(requested_role.name)
+                LOGGER.info(f"Adding {len(db_roles_to_add)} roles to user)")
                 with self.db.begin() as session:
                     add_roles_to_user(session, member.id, member.name, db_roles_to_add)
+                LOGGER.info("Finished adding db_roles to User")
 
                 # Add Sweat Role to member
+                LOGGER.info("Adding Requested Role to Discord Member")
                 await member.add_roles(requested_role)
-                db_roles.update(db_roles_to_add)
-                sweat_role_count = len(db_roles)
-
-                # Add Milestone ROle, if necessary
-                if sweat_role_count >= 8:
-                    if omnisweat_role := guild.get_role(
-                        MILESTONE_ROLES[Roles.OMNI_SWEAT]
-                    ):
-                        await member.add_roles(omnisweat_role)
-
-                    if sweat_lord_role := guild.get_role(
-                        MILESTONE_ROLES[Roles.SWEAT_LORD]
-                    ):
-                        if sweat_lord_role in member.roles:
-                            await member.remove_roles(sweat_lord_role)
-                elif sweat_role_count >= 5:
-                    if sweat_lord_role := guild.get_role(
-                        MILESTONE_ROLES[Roles.SWEAT_LORD]
-                    ):
-                        await member.add_roles(sweat_lord_role)
-
-                    if sweat_knight_role := guild.get_role(
-                        MILESTONE_ROLES[Roles.SWEAT_KNIGHT]
-                    ):
-                        if sweat_knight_role in member.roles:
-                            await member.remove_roles(sweat_knight_role)
-                elif sweat_role_count >= 3:
-                    if sweat_knight_role := guild.get_role(
-                        MILESTONE_ROLES[Roles.SWEAT_KNIGHT]
-                    ):
-                        await member.add_roles(sweat_knight_role)
-
-                # Send confirmation
-                await interaction.response.send_message(
-                    f"✅@silent {interaction.user.mention} Approved role \
-                    {requested_role.name} for {member.mention}",
-                    ephemeral=True,
-                )
-
-                # Disable the button
-                self.disable_buttons()
-                if message := interaction.message:
-                    await message.edit(view=self)
+                LOGGER.info("Successfully Added Requested Role to Discord Member")
 
                 # DM the user
                 try:
@@ -145,6 +111,75 @@ class RoleRequestView(discord.ui.View):
                     )
                 except discord.HTTPException:
                     pass  # User might have DMs disabled
+
+                db_roles.update(db_roles_to_add)
+                sweat_role_count = len(db_roles)
+
+                # Add Milestone ROle, if necessary
+                LOGGER.info(f"User Sweat Role Count is now {sweat_role_count}")
+                try:
+                    if sweat_role_count >= 8:
+                        if omnisweat_role := guild.get_role(
+                            MILESTONE_ROLES[Roles.OMNI_SWEAT]
+                        ):
+                            await member.add_roles(omnisweat_role)
+                            await member.send(
+                                "Congratulations! You're now a Sweat Knight. "
+                                + "Fear not, the blacksmith can surely add "
+                                + "more ventilation holes!"
+                            )
+
+                        if sweat_lord_role := guild.get_role(
+                            MILESTONE_ROLES[Roles.SWEAT_LORD]
+                        ):
+                            if sweat_lord_role in member.roles:
+                                await member.remove_roles(sweat_lord_role)
+                    elif sweat_role_count >= 5:
+                        if sweat_lord_role := guild.get_role(
+                            MILESTONE_ROLES[Roles.SWEAT_LORD]
+                        ):
+                            await member.add_roles(sweat_lord_role)
+                            await member.send(
+                                "Congratulations! You're now a Sweat Lord. "
+                                + "Lo, thou hast transformed thy noble throne "
+                                + "into quite the splash zone"
+                            )
+
+                        if sweat_knight_role := guild.get_role(
+                            MILESTONE_ROLES[Roles.SWEAT_KNIGHT]
+                        ):
+                            if sweat_knight_role in member.roles:
+                                await member.remove_roles(sweat_knight_role)
+                    elif sweat_role_count >= 3:
+                        if sweat_knight_role := guild.get_role(
+                            MILESTONE_ROLES[Roles.SWEAT_KNIGHT]
+                        ):
+                            await member.add_roles(sweat_knight_role)
+                            await member.send(
+                                "As it was foretold in the Damp Scrolls of Destiny! "
+                                + "Look how you glisten with otherworldly radiance! "
+                                + "The heavens themselves open to welcome their"
+                                + " new moistened master!"
+                                + "YOU ARE NOW AN OMNISWEAT"
+                            )
+                except Exception as e:
+                    await interaction.response.send_message(
+                        "Unable to get Milestone role", ephemeral=True
+                    )
+                    LOGGER.info(e)
+                    return
+
+                # Send confirmation
+                await interaction.response.send_message(
+                    f"✅ {interaction.user.mention} Approved role"
+                    + f" {requested_role.name} for {member.mention}",
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+
+                # Disable the button
+                self.disable_buttons()
+                if message := interaction.message:
+                    await message.edit(view=self)
 
             except discord.HTTPException:
                 await interaction.response.send_message(
@@ -170,8 +205,9 @@ class RoleRequestView(discord.ui.View):
         if requested_role and member:
             # Send confirmation
             await interaction.response.send_message(
-                f"@silent {interaction.user.mention} Denied role {requested_role.name} \
-                    for {member.mention}"
+                f"{interaction.user.mention} Denied role {requested_role.name}"
+                + f" for {member.mention}",
+                allowed_mentions=discord.AllowedMentions.none(),
             )
 
             try:
@@ -279,7 +315,7 @@ class RoleRequest(commands.Cog):
         )
         embed.add_field(
             name="User",
-            value=f"{interaction.user.mention} ({interaction.user.id})",
+            value=f"{interaction.user.mention}",
             inline=False,
         )
         embed.add_field(name="Requested Role", value=role.mention, inline=False)

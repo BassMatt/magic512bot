@@ -1,12 +1,11 @@
-import config
-from config import LOGGER
+from config import DB_CONNECTION_STRING, LOGGER
+from models import register_models
+from models.base import Base
 from sqlalchemy import create_engine, inspect
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
-engine = create_engine(config.DB_CONNECTION_STRING, echo=True)  # type: ignore
+engine = create_engine(DB_CONNECTION_STRING, echo=True)  # type: ignore
 SessionLocal = sessionmaker(bind=engine)
-
-Base = declarative_base()
 
 
 def init_db():
@@ -15,11 +14,16 @@ def init_db():
     Returns True if successful, False if there was an error.
     """
     inspector = inspect(engine)
+    models = register_models()
+    print(f"registering {len(models)}")
 
     try:
+
         # Get all table names from your models
         model_tables = Base.metadata.tables.keys()
         existing_tables = inspector.get_table_names()
+        LOGGER.info(f"Existing tables: {existing_tables}")
+        LOGGER.info(f"Model tables: {model_tables}")
 
         # Check which tables need to be created
         tables_to_create = set(model_tables) - set(existing_tables)

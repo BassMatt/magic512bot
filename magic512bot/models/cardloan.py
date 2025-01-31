@@ -1,23 +1,24 @@
 import datetime
 
-from database import Base
 from sqlalchemy import BigInteger, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
+from .base import Base
+
 
 class CardLoan(Base):
-    __tablename__ = 'card_loans'
-    id: Mapped[int] = mapped_column(
-        Integer(), nullable=False, primary_key=True)
+    __tablename__ = "card_loans"
+    id: Mapped[int] = mapped_column(Integer(), nullable=False, primary_key=True)
     # for now, just have cards as names
     card: Mapped[str] = mapped_column(String(100), nullable=False)
     lender: Mapped[int] = mapped_column(
-        BigInteger(), nullable=False)  # discord user id of lender
+        BigInteger(), nullable=False
+    )  # discord user id of lender
     borrower: Mapped[int] = mapped_column(
-        BigInteger(), nullable=False)  # discord user id of borrower
+        BigInteger(), nullable=False
+    )  # discord user id of borrower
     borrower_name: Mapped[str] = mapped_column(String(100), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer(), nullable=False)
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(), nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(), nullable=False)
     # order tag, if not specified defaults to ""
     order_tag: Mapped[str] = mapped_column(String(100), nullable=False)
