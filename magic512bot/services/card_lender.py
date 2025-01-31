@@ -3,7 +3,7 @@ from collections import Counter
 from typing import Sequence
 
 from errors import CardListInputError, CardNotFoundError
-from models.CardLoan import CardLoan
+from models.cardloan import CardLoan
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from table2ascii import Alignment, PresetStyle, table2ascii

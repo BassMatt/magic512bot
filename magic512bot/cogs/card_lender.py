@@ -200,8 +200,10 @@ class CardLender(commands.Cog):
                 tag=tag if tag is not None else "",
             )
             card_sum = sum(card.quantity for card in results)
-            response = f"{interaction.user.mention} has loaned \
-                **{card_sum}** card(s) to {borrower.mention}\n\n"
+            response = (
+                f"{interaction.user.mention} has loaned"
+                + f"**{card_sum}** card(s) to {borrower.mention}\n\n"
+            )
             response += "```\n" + format_loanlist_output(results) + "```"
             await interaction.response.send_message(
                 response, allowed_mentions=discord.AllowedMentions.none()
