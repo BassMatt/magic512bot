@@ -107,7 +107,8 @@ class RoleRequestView(discord.ui.View):
                 # DM the user
                 try:
                     await member.send(
-                        f"Your request for the role {role.name} has been approved! 🎉"
+                        f"Your request for the role {requested_role.name} "
+                        + "has been approved! 🎉"
                     )
                 except discord.HTTPException:
                     pass  # User might have DMs disabled
