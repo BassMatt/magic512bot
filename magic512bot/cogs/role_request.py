@@ -6,7 +6,11 @@ from config import LOGGER, ROLE_REQUEST_CHANNEL_ID
 from discord import app_commands
 from discord.ext import commands
 from main import Magic512Bot
-from services.role_request import add_roles_to_user, get_user_roles
+from services.role_request import (
+    add_roles_to_user,
+    get_user_roles,
+    remove_roles_from_user,
+)
 
 # from services.role_request import add_user_role, remove_user_role
 from sqlalchemy.orm import Session, sessionmaker
@@ -20,6 +24,7 @@ ALLOWED_ROLE_REQUESTS = {
     "Pauper Sweat": 1333302285404471409,
     "Cube Sweat": 1333300770891759637,
     "Limited Sweat": 1333300276781645836,
+    "RC Qualified": 1323031728238891100,
 }
 
 MILESTONE_ROLES = {
@@ -84,19 +89,25 @@ class RoleRequestView(discord.ui.View):
 
                 LOGGER.info(f"{len(db_roles)} Users DB Roles Found")
                 db_roles_to_add: list[str] = []
+                db_roles_to_remove: list[str] = []
 
                 # 1. Read-Repair on the Database with Roles
-                for role in member.roles:
-                    if (
-                        role.name in ALLOWED_ROLE_REQUESTS.keys()
-                        and role.name not in db_roles
-                    ):
-                        db_roles_to_add.append(role.name)
+                member_role_names = [role.name for role in member.roles]
+                for role in member_role_names:
+                    if role in ALLOWED_ROLE_REQUESTS.keys() and role not in db_roles:
+                        db_roles_to_add.append(role)
+                for db_role in db_roles:
+                    if db_role not in member_role_names:
+                        db_roles_to_remove.append(db_role)
 
-                # 3. Add role to database
+                # 3. Sync DB_Roles and Member Roles
                 db_roles_to_add.append(requested_role.name)
                 LOGGER.info(f"Adding {len(db_roles_to_add)} roles to user)")
                 with self.db.begin() as session:
+                    if len(db_roles_to_remove) > 0:
+                        remove_roles_from_user(
+                            session, member.id, member.name, db_roles_to_remove
+                        )
                     add_roles_to_user(session, member.id, member.name, db_roles_to_add)
                 LOGGER.info("Finished adding db_roles to User")
 
@@ -317,14 +328,14 @@ class RoleRequest(commands.Cog):
         # Check if role has "Sweat" in the name
         if role_name not in ALLOWED_ROLE_REQUESTS.keys():
             await interaction.response.send_message(
-                "❌ You can only request Format Sweat roles!",
+                "❌ You can only request Sweat Roles and RC Qualified",
                 ephemeral=True,
             )
             return
 
         if not (role := discord.utils.get(guild.roles, name=role_name)):
             await interaction.response.send_message(
-                "Unable to find role requested. Did you specify a sweat role?",
+                "Unable to find role requested.",
                 ephemeral=True,
             )
             return
