@@ -28,3 +28,10 @@ spec:
             limits:
               memory: "256Mi"
               cpu: "500m" 
+          volumeMounts:
+            - mountPath: /app/data
+              name: sqlite-storage
+      volumes:
+        - name: sqlite-storage
+          persistentVolumeClaim:
+            claimName: magicbot-sqlite-pvc
