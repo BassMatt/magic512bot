@@ -2,7 +2,6 @@ import traceback
 from typing import Optional
 
 import discord
-from cogs.role_request import Roles
 from config import LOGGER
 from discord import app_commands
 from discord.ext import commands
@@ -18,6 +17,8 @@ from services.card_lender import (
     return_cardloans,
 )
 from sqlalchemy.orm import Session, sessionmaker
+
+from magic512bot.cogs.role_request.role_request import Roles
 
 
 class InsertCardLoansModal(discord.ui.Modal, title="LoanList"):

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 
-def get_user_roles(session: Session, user_id: int) -> List[str]:
+def get_user_sweat_roles(session: Session, user_id: int) -> List[str]:
     try:
         query = select(User.roles).where(
             User.id == user_id,
@@ -20,7 +20,7 @@ def get_user_roles(session: Session, user_id: int) -> List[str]:
         raise
 
 
-def add_role_to_user(session: Session, user_id: int, role_name: str) -> None:
+def add_user_sweat_role(session: Session, user_id: int, role_name: str) -> None:
     """Add a role to user's roles in database."""
     query = select(User).where(User.id == user_id)
     result = session.execute(query)
@@ -36,7 +36,7 @@ def add_role_to_user(session: Session, user_id: int, role_name: str) -> None:
         session.add(user)
 
 
-def add_roles_to_user(
+def add_user_sweat_roles(
     session: Session, user_id: int, user_name: str, roles: list[str]
 ) -> None:
     """Add a role to user's roles in database."""
@@ -56,7 +56,7 @@ def add_roles_to_user(
         session.add(user)
 
 
-def remove_roles_from_user(
+def remove_user_sweat_roles(
     session: Session, user_id: int, user_name: str, roles: list[str]
 ):
     query = select(User).where(User.id == user_id)

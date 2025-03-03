@@ -12,4 +12,4 @@ class User(Base):
         BigInteger(), nullable=False, primary_key=True
     )  # discord user id
     user_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    roles: Mapped[List[str]] = mapped_column(ARRAY(String), nullable=False)
+    sweat_roles: Mapped[List[str]] = mapped_column(ARRAY(String), nullable=False)

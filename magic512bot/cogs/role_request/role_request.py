@@ -6,16 +6,22 @@ from config import LOGGER, ROLE_REQUEST_CHANNEL_ID
 from discord import app_commands
 from discord.ext import commands
 from main import Magic512Bot
-from services.role_request import (
-    add_roles_to_user,
-    get_user_roles,
-    remove_roles_from_user,
-)
+from services.role_request import add_user_sweat_role
 
 # from services.role_request import add_user_role, remove_user_role
 from sqlalchemy.orm import Session, sessionmaker
+from sweat import (
+    get_user_sweat_roles,
+    process_user_milestone_roles,
+    sync_user_sweat_roles,
+)
 
-ALLOWED_ROLE_REQUESTS = {
+COMPETITIVE_ROLES = {
+    "RC Qualified": 1323031728238891100,
+    "Pro Tour": 1338683101571977226,
+}
+
+SWEAT_ROLES = {
     "Standard Sweat": 1333297150192259112,
     "Pioneer Sweat": 1316976975138787459,
     "Modern Sweat": 1333297420456431646,
@@ -24,7 +30,6 @@ ALLOWED_ROLE_REQUESTS = {
     "Pauper Sweat": 1333302285404471409,
     "Cube Sweat": 1333300770891759637,
     "Limited Sweat": 1333300276781645836,
-    "RC Qualified": 1323031728238891100,
 }
 
 MILESTONE_ROLES = {
@@ -32,6 +37,8 @@ MILESTONE_ROLES = {
     "Sweat Lord": 1333301233670160435,
     "Sweat Knight": 1333322555465142353,
 }
+
+ALLOWED_ROLE_REQUESTS = COMPETITIVE_ROLES | SWEAT_ROLES
 
 
 class Roles(StrEnum):
@@ -57,6 +64,10 @@ class Roles(StrEnum):
     SWEAT_LORD = "Sweat Lord"  # 5 sweats
     OMNI_SWEAT = "OmniSweat"  # 8 sweats
 
+    # Competitive Roles
+    RC_QUALIFIED = "RC Qualified"
+    PRO_TOUR = "Pro Tour"
+
 
 class RoleRequestView(discord.ui.View):
     def __init__(
@@ -78,109 +89,34 @@ class RoleRequestView(discord.ui.View):
                 "Unable to find guild information!", ephemeral=True
             )
             return
+
         requested_role = guild.get_role(self.role_id)
         member = guild.get_member(self.user_id)
+
         if requested_role and member:
             try:
-                db_roles = None
-                LOGGER.info("Getting Users DB Roles")
-                with self.db.begin() as session:
-                    db_roles = set(get_user_roles(session=session, user_id=member.id))
+                if member.get_role(self.role_id):
+                    await interaction.response.send_message(
+                        "User already has this role!", ephemeral=True
+                    )
+                    return
 
-                LOGGER.info(f"{len(db_roles)} Users DB Roles Found")
-                db_roles_to_add: list[str] = []
-                db_roles_to_remove: list[str] = []
+                sync_user_sweat_roles(member, self.db)
 
-                # 1. Read-Repair on the Database with Roles
-                member_role_names = [role.name for role in member.roles]
-                for role in member_role_names:
-                    if role in ALLOWED_ROLE_REQUESTS.keys() and role not in db_roles:
-                        db_roles_to_add.append(role)
-                for db_role in db_roles:
-                    if db_role not in member_role_names:
-                        db_roles_to_remove.append(db_role)
-
-                # 3. Sync DB_Roles and Member Roles
-                db_roles_to_add.append(requested_role.name)
-                LOGGER.info(f"Adding {len(db_roles_to_add)} roles to user)")
-                with self.db.begin() as session:
-                    if len(db_roles_to_remove) > 0:
-                        remove_roles_from_user(
-                            session, member.id, member.name, db_roles_to_remove
-                        )
-                    add_roles_to_user(session, member.id, member.name, db_roles_to_add)
-                LOGGER.info("Finished adding db_roles to User")
-
-                # Add Sweat Role to member
+                # Add Sweat Role to member, and db
                 LOGGER.info("Adding Requested Role to Discord Member")
                 await member.add_roles(requested_role)
+                with self.db.begin() as session:
+                    add_user_sweat_role(session, member.id, requested_role.name)
                 LOGGER.info("Successfully Added Requested Role to Discord Member")
 
                 # DM the user
-                try:
-                    await member.send(
-                        f"Your request for the role {requested_role.name} "
-                        + "has been approved! 🎉"
-                    )
-                except discord.HTTPException:
-                    pass  # User might have DMs disabled
+                await member.send(
+                    f"Your request for the role {requested_role.name} "
+                    + "has been approved! 🎉"
+                )
 
-                db_roles.update(db_roles_to_add)
-                sweat_role_count = len(db_roles)
-
-                # Add Milestone ROle, if necessary
-                LOGGER.info(f"User Sweat Role Count is now {sweat_role_count}")
-                try:
-                    if sweat_role_count >= 8:
-                        if omnisweat_role := guild.get_role(
-                            MILESTONE_ROLES[Roles.OMNI_SWEAT]
-                        ):
-                            await member.add_roles(omnisweat_role)
-                            await member.send(
-                                "Congratulations! You're now a Sweat Knight. "
-                                + "Fear not, the blacksmith can surely add "
-                                + "more ventilation holes!"
-                            )
-
-                        if sweat_lord_role := guild.get_role(
-                            MILESTONE_ROLES[Roles.SWEAT_LORD]
-                        ):
-                            if sweat_lord_role in member.roles:
-                                await member.remove_roles(sweat_lord_role)
-                    elif sweat_role_count >= 5:
-                        if sweat_lord_role := guild.get_role(
-                            MILESTONE_ROLES[Roles.SWEAT_LORD]
-                        ):
-                            await member.add_roles(sweat_lord_role)
-                            await member.send(
-                                "Congratulations! You're now a Sweat Lord. "
-                                + "Lo, thou hast transformed thy noble throne "
-                                + "into quite the splash zone"
-                            )
-
-                        if sweat_knight_role := guild.get_role(
-                            MILESTONE_ROLES[Roles.SWEAT_KNIGHT]
-                        ):
-                            if sweat_knight_role in member.roles:
-                                await member.remove_roles(sweat_knight_role)
-                    elif sweat_role_count >= 3:
-                        if sweat_knight_role := guild.get_role(
-                            MILESTONE_ROLES[Roles.SWEAT_KNIGHT]
-                        ):
-                            await member.add_roles(sweat_knight_role)
-                            await member.send(
-                                "As it was foretold in the Damp Scrolls of Destiny! "
-                                + "Look how you glisten with otherworldly radiance! "
-                                + "The heavens themselves open to welcome their"
-                                + " new moistened master!"
-                                + "YOU ARE NOW AN OMNISWEAT"
-                            )
-                except Exception as e:
-                    await interaction.response.send_message(
-                        "Unable to get Milestone role", ephemeral=True
-                    )
-                    LOGGER.info(e)
-                    return
+                await process_user_milestone_roles(member, guild, self.db)
 
                 # Send confirmation
                 await interaction.response.send_message(
@@ -388,7 +324,75 @@ class RoleRequest(commands.Cog):
             ephemeral=True,
         )
 
+    @app_commands.command(name="bootstrap-db")
+    @app_commands.checks.has_role(Roles.MOD.value)
+    @app_commands.guild_only()
+    async def bootstrap_db(self, interaction: discord.Interaction):
+        if not (guild := interaction.guild):
+            await interaction.response.send_message(
+                "This command can only be used in a server!", ephemeral=True
+            )
+            return
+
+        await interaction.response.send_message(
+            "Starting role synchronization. This may take a while...", ephemeral=True
+        )
+
+        for member in guild.members:
+            if member.bot:
+                continue
+
+            sync_user_sweat_roles(member, self.bot.db)
+
+        await interaction.followup.send(
+            "Role synchronization complete!", ephemeral=True
+        )
+
+    @app_commands.command(name="leaderboard")
+    @app_commands.guild_only()
+    async def sweat_leaderboard(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            await interaction.response.send_message(
+                "This command can only be used in a server!", ephemeral=True
+            )
+            return
+
+        # Get sweat role counts for all members
+        leaderboard = {}
+        for member in interaction.guild.members:
+            if member.bot:
+                continue
+            sweat_count = len(
+                [role for role in member.roles if role.name in SWEAT_ROLES]
+            )
+            if sweat_count > 0:
+                leaderboard[member.display_name] = sweat_count
+
+        # Sort by count in descending order
+        sorted_leaderboard = dict(
+            sorted(leaderboard.items(), key=lambda x: x[1], reverse=True)
+        )
+
+        # Create embed
+        embed = discord.Embed(
+            title="Sweat Role Leaderboard",
+            color=discord.Color.blue(),
+            timestamp=discord.utils.utcnow(),
+        )
+
+        # Add leaderboard entries
+        leaderboard_text = "\n".join(
+            f"{idx + 1}. {name}: {count} sweat roles"
+            for idx, (name, count) in enumerate(sorted_leaderboard.items())
+        )
+
+        if leaderboard_text:
+            embed.description = leaderboard_text
+        else:
+            embed.description = "No sweat roles found!"
+
+        await interaction.response.send_message(embed=embed)
+
 
 async def setup(bot: commands.Bot) -> None:
-
     await bot.add_cog(RoleRequest(bot))
