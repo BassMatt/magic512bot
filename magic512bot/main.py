@@ -27,15 +27,20 @@ class Magic512Bot(commands.Bot):
 
     async def load_cogs(self):
         LOGGER.info("Loading cogs")
-        for filename in os.listdir("./cogs"):
-            if filename.endswith(".py"):
-                try:
-                    LOGGER.info(f"Loading extension: cogs.{filename[:-3]}")
-                    await self.load_extension(f"cogs.{filename[:-3]}")
-                    LOGGER.info(f"Loaded cog: {filename[:-3]}")
-                except Exception as e:
-                    LOGGER.info(f"Failed to load cog {filename[:-3]}")
-                    LOGGER.info(f"Error: {str(e)}")
+        for root, _, files in os.walk("./cogs"):
+            for filename in files:
+                if filename.endswith(".py"):
+                    cog_path = os.path.join(root, filename)
+                    cog_module = (
+                        cog_path.replace("/", ".").replace("\\", ".").replace(".py", "")
+                    )
+                    try:
+                        LOGGER.info(f"Loading extension: {cog_module}")
+                        await self.load_extension(cog_module)
+                        LOGGER.info(f"Loaded cog: {cog_module}")
+                    except Exception as e:
+                        LOGGER.info(f"Failed to load cog {cog_module}")
+                        LOGGER.info(f"Error: {str(e)}")
 
     async def sync_commands(self):
         LOGGER.info("Syncing commands")

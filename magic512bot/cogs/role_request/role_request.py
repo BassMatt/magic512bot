@@ -11,7 +11,6 @@ from services.role_request import add_user_sweat_role
 # from services.role_request import add_user_role, remove_user_role
 from sqlalchemy.orm import Session, sessionmaker
 from sweat import (
-    get_user_sweat_roles,
     process_user_milestone_roles,
     sync_user_sweat_roles,
 )
