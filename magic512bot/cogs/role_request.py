@@ -358,7 +358,7 @@ class RoleRequest(commands.Cog):
             return
 
         # Get sweat role counts for all members
-        leaderboard = {}
+        count_to_members = {}
         for member in interaction.guild.members:
             if member.bot:
                 continue
@@ -366,32 +366,35 @@ class RoleRequest(commands.Cog):
                 [role for role in member.roles if role.name in SWEAT_ROLES]
             )
             if sweat_count > 0:
-                leaderboard[member.display_name] = sweat_count
-
-        # Sort by count in descending order
-        sorted_leaderboard = dict(
-            sorted(leaderboard.items(), key=lambda x: x[1], reverse=True)
-        )
+                if sweat_count not in count_to_members:
+                    count_to_members[sweat_count] = []
+                count_to_members[sweat_count].append(member)
 
         # Create embed
         embed = discord.Embed(
-            title="Sweat Role Leaderboard",
+            title="💦 Sweat Role Leaderboard 🏆",
             color=discord.Color.blue(),
             timestamp=discord.utils.utcnow(),
         )
 
-        # Add leaderboard entries
-        leaderboard_text = "\n".join(
-            f"{idx + 1}. {name}: {count} sweat roles"
-            for idx, (name, count) in enumerate(sorted_leaderboard.items())
-        )
+        # Add entries sorted by count in descending order
+        leaderboard_text = []
+        for count in sorted(count_to_members.keys(), reverse=True):
+            members = count_to_members[count]
+            mentions = " ".join(
+                member.mention
+                for member in sorted(members, key=lambda m: m.display_name)
+            )
+            leaderboard_text.append(f"**{count} roles**: {mentions}")
 
         if leaderboard_text:
-            embed.description = leaderboard_text
+            embed.description = "\n".join(leaderboard_text)
         else:
-            embed.description = "No sweat roles found!"
+            embed.description = "No sweat roles found! 💨"
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(
+            embed=embed, allowed_mentions=discord.AllowedMentions.none()
+        )
 
 
 async def setup(bot: commands.Bot) -> None:
