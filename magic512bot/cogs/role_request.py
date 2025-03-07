@@ -1,20 +1,20 @@
 from enum import StrEnum
-from typing import List, Set
 
 import discord
-from config import LOGGER, ROLE_REQUEST_CHANNEL_ID
 from discord import app_commands
 from discord.ext import commands
-from main import Magic512Bot
-from services.role_request import (
+
+# from services.role_request import add_user_role, remove_user_role
+from sqlalchemy.orm import Session, sessionmaker
+
+from magic512bot.config import LOGGER, ROLE_REQUEST_CHANNEL_ID
+from magic512bot.main import Magic512Bot
+from magic512bot.services.role_request import (
     add_user_sweat_role,
     add_user_sweat_roles,
     get_user_sweat_roles,
     remove_user_sweat_roles,
 )
-
-# from services.role_request import add_user_role, remove_user_role
-from sqlalchemy.orm import Session, sessionmaker
 
 COMPETITIVE_ROLES = {
     "RC Qualified": 1323031728238891100,
@@ -39,6 +39,11 @@ MILESTONE_ROLES = {
 }
 
 ALLOWED_ROLE_REQUESTS = COMPETITIVE_ROLES | SWEAT_ROLES
+
+# Constants for role thresholds
+OMNI_SWEAT_THRESHOLD = 8
+SWEAT_LORD_THRESHOLD = 5
+SWEAT_KNIGHT_THRESHOLD = 3
 
 
 class Roles(StrEnum):
@@ -229,12 +234,12 @@ class RoleRequest(commands.Cog):
         self,
         interaction: discord.Interaction,
         current: str,
-    ) -> List[app_commands.Choice[str]]:
+    ) -> list[app_commands.Choice[str]]:
         # List of allowed role names
         return [
-            app_commands.Choice(name=role, value=role)
-            for role in ALLOWED_ROLE_REQUESTS.keys()
-            if current.lower() in role.lower()
+            app_commands.Choice(name=role.value, value=role.value)
+            for role in Roles
+            if current.lower() in role.value.lower()
         ]
 
     @app_commands.command(name="role-request")
@@ -358,7 +363,7 @@ class RoleRequest(commands.Cog):
             return
 
         # Get sweat role counts for all members
-        count_to_members = {}
+        count_to_members: dict[int, list[discord.Member]] = {}
         for member in interaction.guild.members:
             if member.bot:
                 continue
@@ -403,7 +408,7 @@ async def setup(bot: commands.Bot) -> None:
 
 def _sync_user_sweat_roles(
     member: discord.Member, db: sessionmaker[Session]
-) -> Set[str]:
+) -> set[str]:
     """
     Want to treat user's Discord roles as source of truth incase bot goes down,
     or want to manually add for whatever reason.
@@ -464,38 +469,39 @@ async def _process_user_milestone_roles(
 
     # Add Milestone ROle, if necessary
     LOGGER.info(f"User Sweat Role Count is now {sweat_role_count}")
-    if sweat_role_count >= 8:
+    if sweat_role_count >= OMNI_SWEAT_THRESHOLD:
         if any(role.name == Roles.OMNI_SWEAT for role in member.roles):
             return
         await _clear_user_sweat_milestones(member)
         if omnisweat_role := guild.get_role(MILESTONE_ROLES[Roles.OMNI_SWEAT]):
             await member.add_roles(omnisweat_role)
             await member.send(
-                "Congratulations! You're now a Sweat Knight. "
-                + "Fear not, the blacksmith can surely add "
+                "Congratulations! You've earned the Omni Sweat role! "
+                + "Your dedication to sweating has created even "
                 + "more ventilation holes!"
             )
-    elif sweat_role_count >= 5 and sweat_role_count < 8:
+    elif (
+        sweat_role_count >= SWEAT_LORD_THRESHOLD
+        and sweat_role_count < OMNI_SWEAT_THRESHOLD
+    ):
         if any(role.name == Roles.SWEAT_LORD for role in member.roles):
             return
         await _clear_user_sweat_milestones(member)
         if sweat_lord_role := guild.get_role(MILESTONE_ROLES[Roles.SWEAT_LORD]):
             await member.add_roles(sweat_lord_role)
             await member.send(
-                "Congratulations! You're now a Sweat Lord. "
-                + "Lo, thou hast transformed thy noble throne "
-                + "into quite the splash zone"
+                "Congratulations! You've earned the Sweat Lord role! "
+                + "Your dedication to sweating has created even "
+                + "more ventilation holes!"
             )
-    elif sweat_role_count >= 3:
+    elif sweat_role_count >= SWEAT_KNIGHT_THRESHOLD:
         if any(role.name == Roles.SWEAT_KNIGHT for role in member.roles):
             return
         await _clear_user_sweat_milestones(member)
         if sweat_knight_role := guild.get_role(MILESTONE_ROLES[Roles.SWEAT_KNIGHT]):
             await member.add_roles(sweat_knight_role)
             await member.send(
-                "As it was foretold in the Damp Scrolls of Destiny! "
-                + "Look how you glisten with otherworldly radiance! "
-                + "The heavens themselves open to welcome their"
-                + " new moistened master!"
-                + "YOU ARE NOW AN OMNISWEAT"
+                "Congratulations! You've earned the Sweat Knight role! "
+                + "Your dedication to sweating has turned you "
+                + "into quite the splash zone"
             )

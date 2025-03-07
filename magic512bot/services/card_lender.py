@@ -1,12 +1,13 @@
 import datetime
 from collections import Counter
-from typing import Sequence
+from collections.abc import Sequence
 
-from errors import CardListInputError, CardNotFoundError
-from models.cardloan import CardLoan
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from table2ascii import Alignment, PresetStyle, table2ascii
+
+from magic512bot.errors import CardListInputError, CardNotFoundError
+from magic512bot.models.cardloan import CardLoan
 
 
 def insert_cardloans(
@@ -153,7 +154,7 @@ def parse_cardlist(cardlist: list[str]) -> dict[str, int]:
     Returns: Dictionary that maps CardName -> Quantity
     """
     line_errors = []
-    loans = Counter()
+    loans: Counter[str] = Counter()
     for line in cardlist:
         split = line.split(" ", 1)
 
@@ -198,9 +199,8 @@ def format_loanlist_output(cards: list[CardLoan]):
 
 
 def format_bulk_loanlist_output(cards: list[CardLoan]):
-
-    bulk_list = []
-    bulk_card_counts = {}
+    bulk_list: list[list[str]] = []
+    bulk_card_counts: dict[str, Counter[str]] = {}
     for card in cards:
         if card.borrower_name not in bulk_card_counts:
             bulk_card_counts[card.borrower_name] = Counter()
@@ -208,8 +208,8 @@ def format_bulk_loanlist_output(cards: list[CardLoan]):
         tag = "<empty>" if not card.order_tag else card.order_tag
         bulk_card_counts[card.borrower_name][card.order_tag] += card.quantity
 
-    for borrower in bulk_card_counts.keys():
-        for tag, card_count in bulk_card_counts[borrower].items():
+    for borrower, tag_counts in bulk_card_counts.items():
+        for tag, card_count in tag_counts.items():
             bulk_list.append([borrower, tag, card_count])
 
     output = table2ascii(

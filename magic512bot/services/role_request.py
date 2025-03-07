@@ -1,20 +1,17 @@
-from typing import List
-
-from config import LOGGER
-from models.user import User
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from magic512bot.config import LOGGER
+from magic512bot.models.user import User
 
-def get_user_sweat_roles(session: Session, user_id: int) -> List[str]:
+
+def get_user_sweat_roles(session: Session, user_id: int) -> list[str]:
     try:
         query = select(User.sweat_roles).where(User.id == user_id)
-        # Execute query and fetch result
-        if result := session.execute(query).scalar_one_or_none():
-            return result or []
-        return []
+        result = session.execute(query).scalar_one_or_none()
+        return result if result is not None else []
     except Exception as e:
-        LOGGER.error(f"Error querying sweat roles for user {user_id}: {str(e)}")
+        LOGGER.error(f"Error querying sweat roles for user {user_id}: {e!s}")
         raise
 
 

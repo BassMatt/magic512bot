@@ -1,10 +1,8 @@
-import os
-
-import config
 import discord
-from config import LOGGER
-from database import SessionLocal, init_db
 from discord.ext import commands
+
+from magic512bot.config import BOT_TOKEN, LOGGER, TEST_GUILD_ID
+from magic512bot.database import SessionLocal, init_db
 
 
 class Magic512Bot(commands.Bot):
@@ -36,17 +34,17 @@ class Magic512Bot(commands.Bot):
                 LOGGER.info(f"Loaded cog: {module}")
             except (commands.ExtensionError, Exception) as e:
                 LOGGER.error(f"Failed to load cog {module}")
-                LOGGER.error(f"Error: {str(e)}")
+                LOGGER.error(f"Error: {e!s}")
 
     async def sync_commands(self):
         LOGGER.info("Syncing commands")
         # For syncing to a specific guild (faster for testing)
-        test_guild = discord.Object(id=config.TEST_GUILD_ID)
+        test_guild = discord.Object(id=TEST_GUILD_ID)
         self.tree.copy_global_to(guild=test_guild)
-        if config.TEST_GUILD_ID:
+        if TEST_GUILD_ID:
             LOGGER.info(f"{[cmd.name for cmd in self.tree.get_commands()]}")
             synced = await self.tree.sync(guild=test_guild)
-            LOGGER.info(f"Synced commands to guild {config.TEST_GUILD_ID}")
+            LOGGER.info(f"Synced commands to guild {TEST_GUILD_ID}")
             LOGGER.info(f"synced {len(synced)} commands to guild")
         else:
             # For syncing globally (can take up to an hour to propagate)
@@ -63,7 +61,7 @@ async def main():
 
     # Start the bot with your token
     async with bot:
-        await bot.start(config.BOT_TOKEN)
+        await bot.start(BOT_TOKEN)
 
 
 if __name__ == "__main__":

@@ -1,14 +1,15 @@
 import traceback
-from typing import Optional
 
 import discord
-from cogs.role_request import Roles
-from config import LOGGER
 from discord import app_commands
 from discord.ext import commands
-from errors import CardListInputError, CardNotFoundError
-from main import Magic512Bot
-from services.card_lender import (
+from sqlalchemy.orm import Session, sessionmaker
+
+from magic512bot.cogs.role_request import Roles
+from magic512bot.config import LOGGER
+from magic512bot.errors import CardListInputError, CardNotFoundError
+from magic512bot.main import Magic512Bot
+from magic512bot.services.card_lender import (
     bulk_get_cardloans,
     bulk_return_cardloans,
     format_bulk_loanlist_output,
@@ -17,23 +18,24 @@ from services.card_lender import (
     insert_cardloans,
     return_cardloans,
 )
-from sqlalchemy.orm import Session, sessionmaker
 
 
 class InsertCardLoansModal(discord.ui.Modal, title="LoanList"):
-    loanlist = discord.ui.TextInput(
-        label="LoanList",
-        style=discord.TextStyle.long,
-        required=True,
-        max_length=1000,
-        placeholder="1 Sheoldred, the Apocalypse\n3 Ketria Triome\n...",
-    )
+    loanlist: discord.ui.TextInput
 
     def __init__(self, db: sessionmaker[Session], borrower: discord.Member, tag: str):
+        super().__init__()
+        self.loanlist = discord.ui.TextInput(
+            label="LoanList",
+            style=discord.TextStyle.long,
+            required=True,
+            max_length=1000,
+            placeholder="1 Sheoldred, the Apocalypse\n3 Ketria Triome\n...",
+        )
+        self.add_item(self.loanlist)
         self.db = db
         self.borrower = borrower
         self.tag = tag
-        super().__init__(title="LoanList")
 
     async def on_submit(self, interaction: discord.Interaction):
         with self.db.begin() as session:
@@ -53,8 +55,8 @@ class InsertCardLoansModal(discord.ui.Modal, title="LoanList"):
             )
 
     async def on_error(
-        self, interaction: discord.Interaction, error: Exception
-    ) -> None:
+        self, interaction: discord.Interaction, error: Exception, /
+    ) -> None:  # type: ignore
         if isinstance(error, CardListInputError):
             await interaction.response.send_message(str(error), ephemeral=True)
         else:
@@ -65,41 +67,45 @@ class InsertCardLoansModal(discord.ui.Modal, title="LoanList"):
 
 
 class ReturnCardLoansModal(discord.ui.Modal, title="LoanList"):
-    loanlist = discord.ui.TextInput(
-        label="LoanList",
-        style=discord.TextStyle.long,
-        required=True,
-        max_length=1000,
-        placeholder="1 Sheoldred, the Apocalypse\n3 Ketria Triome\n...",
-    )
+    loanlist: discord.ui.TextInput
 
     def __init__(
         self, db: sessionmaker[Session], borrower: discord.Member, tag: str = ""
     ):
+        super().__init__()
+        self.loanlist = discord.ui.TextInput(
+            label="LoanList",
+            style=discord.TextStyle.long,
+            required=True,
+            max_length=1000,
+            placeholder="1 Sheoldred, the Apocalypse\n3 Ketria Triome\n...",
+        )
+        self.add_item(self.loanlist)
         self.db = db
         self.borrower = borrower
         self.tag = tag
-        super().__init__(title="LoanList")
 
     async def on_submit(self, interaction: discord.Interaction):
         with self.db.begin() as session:
-            cards_returned = return_cardloans(
-                session=session,
-                card_list=self.loanlist.value.split("\n"),
-                lender=interaction.user.id,
-                borrower=self.borrower.id,
-                tag=self.tag,
-            )
-            message = f"{self.borrower.mention} returned \
-                **{cards_returned}** cards to {interaction.user.mention}."
-            await interaction.response.send_message(
-                message,
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
+            try:
+                cards_returned = return_cardloans(
+                    session=session,
+                    card_list=self.loanlist.value.split("\n"),
+                    lender=interaction.user.id,
+                    borrower=self.borrower.id,
+                    tag=self.tag,
+                )
+                message = f"{self.borrower.mention} returned **{cards_returned}** \
+                    cards to {interaction.user.mention}"
+                await interaction.response.send_message(
+                    message, allowed_mentions=discord.AllowedMentions.none()
+                )
+            except CardNotFoundError as e:
+                await interaction.response.send_message(str(e), ephemeral=True)
 
     async def on_error(
-        self, interaction: discord.Interaction, error: Exception
-    ) -> None:
+        self, interaction: discord.Interaction, error: Exception, /
+    ) -> None:  # type: ignore[override]
         if isinstance(error, CardListInputError):
             await interaction.response.send_message(str(error), ephemeral=True)
         elif isinstance(error, CardNotFoundError):
@@ -112,7 +118,7 @@ class ReturnCardLoansModal(discord.ui.Modal, title="LoanList"):
 
 
 class CardLender(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: Magic512Bot):
         self.bot: Magic512Bot = bot
         LOGGER.info("CardLender Cog Initialized")
 
@@ -127,7 +133,7 @@ class CardLender(commands.Cog):
         self,
         interaction: discord.Interaction,
         borrower: discord.Member,
-        tag: Optional[str] = "",
+        tag: str | None = "",
     ):
         tag = tag if tag is not None else ""
         loan_modal = InsertCardLoansModal(self.bot.db, borrower, tag)
@@ -140,13 +146,13 @@ class CardLender(commands.Cog):
         tag="Return cards with a given order tag",
     )
     @app_commands.rename(borrower="from")
-    async def return_card_handler(
+    async def return_cards(
         self,
         interaction: discord.Interaction,
         borrower: discord.Member,
-        tag: Optional[str],
+        tag: str | None = "",
     ):
-        tag = tag if tag else ""
+        tag = tag if tag is not None else ""
         return_modal = ReturnCardLoansModal(self.bot.db, borrower, tag)
         await interaction.response.send_modal(return_modal)
 
@@ -157,11 +163,11 @@ class CardLender(commands.Cog):
         tag="Return cards with a given order tag",
     )
     @app_commands.rename(borrower="from")
-    async def bulk_return_Cards_handler(
+    async def bulk_return_cards_handler(
         self,
         interaction: discord.Interaction,
         borrower: discord.Member,
-        tag: Optional[str] = "",
+        tag: str | None = "",
     ):
         with self.bot.db.begin() as session:
             returned_count = bulk_return_cardloans(
@@ -190,7 +196,7 @@ class CardLender(commands.Cog):
         self,
         interaction: discord.Interaction,
         borrower: discord.Member,
-        tag: Optional[str] = "",
+        tag: str | None = "",
     ):
         with self.bot.db.begin() as session:
             results = get_cardloans(
@@ -221,4 +227,4 @@ class CardLender(commands.Cog):
 
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(CardLender(bot))
+    await bot.add_cog(CardLender(bot))  # type: ignore

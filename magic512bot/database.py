@@ -1,8 +1,9 @@
-from config import DB_CONNECTION_STRING, LOGGER
-from models import register_models
-from models.base import Base
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
+
+from magic512bot.config import DB_CONNECTION_STRING, LOGGER
+from magic512bot.models import register_models
+from magic512bot.models.base import Base
 
 engine = create_engine(DB_CONNECTION_STRING, echo=True)  # type: ignore
 SessionLocal = sessionmaker(bind=engine)
@@ -18,7 +19,6 @@ def init_db():
     print(f"registering {len(models)}")
 
     try:
-
         # Get all table names from your models
         model_tables = Base.metadata.tables.keys()
         existing_tables = inspector.get_table_names()
@@ -38,5 +38,5 @@ def init_db():
         return True
 
     except Exception as e:
-        LOGGER.error(f"💥 Database initialization failed: {str(e)}")
+        LOGGER.error(f"💥 Database initialization failed: {e!s}")
         return False
