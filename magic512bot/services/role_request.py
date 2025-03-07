@@ -15,7 +15,9 @@ def get_user_sweat_roles(session: Session, user_id: int) -> list[str]:
         raise
 
 
-def add_user_sweat_role(session: Session, user_id: int, role_name: str) -> None:
+def add_user_sweat_role(
+    session: Session, user_id: int, user_name: str, role_name: str
+) -> None:
     """Add a role to user's sweat_roles in database."""
     query = select(User).where(User.id == user_id)
     result = session.execute(query)
@@ -25,9 +27,9 @@ def add_user_sweat_role(session: Session, user_id: int, role_name: str) -> None:
         if user.sweat_roles is None:
             user.sweat_roles = []
         if role_name not in user.sweat_roles:
-            user.sweat_roles.append(role_name)
+            user.sweat_roles = user.sweat_roles + [role_name]
     else:
-        user = User(id=user_id, sweat_roles=[role_name])
+        user = User(id=user_id, user_name=user_name, sweat_roles=[role_name])
         session.add(user)
 
 

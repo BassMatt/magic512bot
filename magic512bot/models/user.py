@@ -2,7 +2,7 @@ from sqlalchemy import BigInteger, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy_utils import JSONType
 
-from magic512bot.database import Base
+from .base import Base
 
 
 class User(Base):

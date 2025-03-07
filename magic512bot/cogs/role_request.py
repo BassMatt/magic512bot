@@ -112,7 +112,9 @@ class RoleRequestView(discord.ui.View):
                 LOGGER.info("Adding Requested Role to Discord Member")
                 await member.add_roles(requested_role)
                 with self.db.begin() as session:
-                    add_user_sweat_role(session, member.id, requested_role.name)
+                    add_user_sweat_role(
+                        session, member.id, member.name, requested_role.name
+                    )
                 LOGGER.info("Successfully Added Requested Role to Discord Member")
 
                 # DM the user
