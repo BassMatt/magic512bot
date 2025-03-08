@@ -29,12 +29,14 @@ async def test_loan_handler(mock_bot, mock_interaction, mock_member):
 
 
 @pytest.mark.asyncio
-async def test_return_cards(mock_bot, mock_interaction, mock_member):
+async def test_return_cards_handler(mock_bot, mock_interaction, mock_member):
     """Test the return_cards command."""
     cog = CardLender(mock_bot)
 
     # Access the callback directly
-    await cog.return_cards.callback(cog, mock_interaction, mock_member, "test_tag")
+    await cog.return_cards_handler.callback(
+        cog, mock_interaction, mock_member, "test_tag"
+    )
 
     # Verify that the modal was sent
     mock_interaction.response.send_modal.assert_called_once()
@@ -68,7 +70,7 @@ async def test_bulk_return_cards_handler(mock_bot, mock_interaction, mock_member
 
 
 @pytest.mark.asyncio
-async def test_get_loans_handler(mock_bot, mock_interaction, mock_member):
+async def test_list_loans_handler(mock_bot, mock_interaction, mock_member):
     """Test the get_loans_handler command."""
     cog = CardLender(mock_bot)
 
@@ -86,7 +88,7 @@ async def test_get_loans_handler(mock_bot, mock_interaction, mock_member):
             return_value="Formatted Output",
         ):
             # Access the callback directly
-            await cog.get_loans_handler.callback(
+            await cog.list_loans_handler.callback(
                 cog, mock_interaction, mock_member, "test_tag"
             )
 
@@ -101,8 +103,8 @@ async def test_get_loans_handler(mock_bot, mock_interaction, mock_member):
 
 
 @pytest.mark.asyncio
-async def test_bulk_get_loans_handler(mock_bot, mock_interaction):
-    """Test the bulk_get_loans_handler command."""
+async def test_list_all_loans_handler(mock_bot, mock_interaction):
+    """Test the list_all_loans_handler command."""
     cog = CardLender(mock_bot)
 
     # Mock the bulk_get_cardloans function
@@ -113,7 +115,7 @@ async def test_bulk_get_loans_handler(mock_bot, mock_interaction):
             return_value="Bulk Formatted Output",
         ):
             # Access the callback directly
-            await cog.bulk_get_loans_handler.callback(cog, mock_interaction)
+            await cog.list_all_loans_handler.callback(cog, mock_interaction)
 
             # Verify that the response was sent
             mock_interaction.response.send_message.assert_called_once()

@@ -210,7 +210,7 @@ def format_bulk_loanlist_output(cards: list[CardLoan]):
 
     for borrower, tag_counts in bulk_card_counts.items():
         for tag, card_count in tag_counts.items():
-            bulk_list.append([borrower, tag, card_count])
+            bulk_list.append([borrower, tag, str(card_count)])
 
     output = table2ascii(
         header=["Borrower", "Tag", "Count"],

@@ -182,8 +182,9 @@ class RoleRequestView(discord.ui.View):
 
 
 class RoleRequest(commands.Cog):
-    def __init__(self, bot):
-        self.bot: Magic512Bot = bot
+    def __init__(self, bot: Magic512Bot):
+        self.bot = bot
+        LOGGER.info("RoleRequest Cog Initialized")
 
     @app_commands.command(name="monarch-assign")
     @app_commands.describe(to="the team member who will receive Monarch")
@@ -404,7 +405,7 @@ class RoleRequest(commands.Cog):
         )
 
 
-async def setup(bot: commands.Bot) -> None:
+async def setup(bot: Magic512Bot) -> None:
     await bot.add_cog(RoleRequest(bot))
 
 

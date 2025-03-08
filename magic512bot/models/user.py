@@ -1,6 +1,6 @@
 from sqlalchemy import BigInteger, String
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy_utils import JSONType
+from sqlalchemy_utils import JSONType  # type: ignore[import-untyped]
 
 from .base import Base
 

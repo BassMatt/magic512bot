@@ -54,9 +54,9 @@ class InsertCardLoansModal(discord.ui.Modal, title="LoanList"):
                 message, allowed_mentions=discord.AllowedMentions.none()
             )
 
-    async def on_error(
+    async def on_error(  # type: ignore[override]
         self, interaction: discord.Interaction, error: Exception, /
-    ) -> None:  # type: ignore
+    ) -> None:
         if isinstance(error, CardListInputError):
             await interaction.response.send_message(str(error), ephemeral=True)
         else:
@@ -103,9 +103,9 @@ class ReturnCardLoansModal(discord.ui.Modal, title="LoanList"):
             except CardNotFoundError as e:
                 await interaction.response.send_message(str(e), ephemeral=True)
 
-    async def on_error(
+    async def on_error(  # type: ignore[override]
         self, interaction: discord.Interaction, error: Exception, /
-    ) -> None:  # type: ignore[override]
+    ) -> None:
         if isinstance(error, CardListInputError):
             await interaction.response.send_message(str(error), ephemeral=True)
         elif isinstance(error, CardNotFoundError):
@@ -146,7 +146,7 @@ class CardLender(commands.Cog):
         tag="Return cards with a given order tag",
     )
     @app_commands.rename(borrower="from")
-    async def return_cards(
+    async def return_cards_handler(
         self,
         interaction: discord.Interaction,
         borrower: discord.Member,
@@ -156,7 +156,7 @@ class CardLender(commands.Cog):
         return_modal = ReturnCardLoansModal(self.bot.db, borrower, tag)
         await interaction.response.send_modal(return_modal)
 
-    @app_commands.command(name="bulkreturn", description="Return many cards")
+    @app_commands.command(name="bulk-return", description="Return many cards")
     @app_commands.checks.has_role(Roles.TEAM.value)
     @app_commands.describe(
         borrower="@mention member that is returning the loaned cards",
@@ -184,15 +184,15 @@ class CardLender(commands.Cog):
             )
 
     @app_commands.command(
-        name="getloans", description="Check loans from given borrower"
+        name="list-loans", description="Check loans from given borrower"
     )
     @app_commands.checks.has_role(Roles.TEAM.value)
     @app_commands.describe(
-        borrower="@mention member that is borrowing the cards",
+        borrower="@mention member that you are loaning cards to",
         tag="Query for cards with given order tag",
     )
     @app_commands.rename(borrower="to")
-    async def get_loans_handler(
+    async def list_loans_handler(
         self,
         interaction: discord.Interaction,
         borrower: discord.Member,
@@ -216,15 +216,15 @@ class CardLender(commands.Cog):
             )
 
     @app_commands.command(
-        name="bulkgetloans", description="Check loans from all borrowers"
+        name="list-all-loans", description="Check loans from all borrowers"
     )
     @app_commands.checks.has_role(Roles.TEAM.value)
-    async def bulk_get_loans_handler(self, interaction: discord.Interaction):
+    async def list_all_loans_handler(self, interaction: discord.Interaction):
         with self.bot.db.begin() as session:
             results = bulk_get_cardloans(session=session, lender=interaction.user.id)
             response = "```\n" + format_bulk_loanlist_output(results) + "```"
             await interaction.response.send_message(response)
 
 
-async def setup(bot: commands.Bot) -> None:
+async def setup(bot: Magic512Bot) -> None:
     await bot.add_cog(CardLender(bot))  # type: ignore
