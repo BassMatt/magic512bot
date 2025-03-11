@@ -1,29 +1,27 @@
-FROM python:3.11-slim AS builder
+# Install uv
+FROM python:3.13-slim AS builder
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-RUN python -m pip install pipx
-
-RUN pipx install poetry
-
-ENV PATH="$PATH:/root/.local/bin"
-
-ENV POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=1 \
-    POETRY_VIRTUALENVS_CREATE=1 \
-    POETRY_CACHE_DIR=/tmp/poetry_cache
-
+# Change the working directory to the `app` directory
 WORKDIR /app
 
-COPY pyproject.toml poetry.lock ./
-RUN --mount=type=cache,target=$POETRY_CACHE_DIR poetry install --no-root
+# Install dependencies
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project --no-editable
 
-FROM python:3.11-slim AS runtime
+# Copy the project into the intermediate image
+ADD . /app
 
-ENV VIRTUAL_ENV=/app/.venv \
-    PATH="/app/.venv/bin:$PATH"
+# Sync the project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-editable
 
-COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
+FROM python:3.13-slim
 
-COPY ./magic512bot /magic512bot
-WORKDIR /magic512bot
+# Copy the environment, but not the source code
+COPY --from=builder --chown=app:app /app/.venv /app/.venv
 
-ENTRYPOINT ["python", "main.py"]
+# Run the application
+CMD ["/app/.venv/bin/python", "-m", "magic512bot.main"]
