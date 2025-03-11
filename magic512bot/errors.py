@@ -41,13 +41,3 @@ class CardNotFoundError(Error):
             message += f"{quantity} {card_name}\n"
         message += "```"
         return message
-
-
-class NominationError(Error):
-    """Exception raised for errors in the nomination process."""
-
-    def __init__(self, message):
-        self.message = message
-
-    def __str__(self):
-        return self.message

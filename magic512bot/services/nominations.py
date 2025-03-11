@@ -8,6 +8,8 @@ from magic512bot.models.nominations import Nominations
 def add_nomination(session: Session, user_id: int, format: str) -> None:
     """Add a format nomination to the database."""
     try:
+        if len(format) > 55:
+            raise ValueError("Format is too long")
         # Check if user already has a nomination
         existing = session.execute(
             select(Nominations).where(Nominations.user_id == user_id)

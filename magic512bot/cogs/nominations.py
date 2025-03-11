@@ -51,6 +51,13 @@ class Nominations(commands.Cog):
             )
             return
 
+        if len(format) > 55:
+            await interaction.response.send_message(
+                "Format is too long. Please keep it under 55 characters.",
+                ephemeral=True,
+            )
+            return
+
         # Check if user already has 2 nominations
         with self.bot.db.begin() as session:
             if (
@@ -195,18 +202,17 @@ class Nominations(commands.Cog):
             return
 
         LOGGER.info("Format voting poll has ended. Processing results...")
+        try:
+            # Find the winning format
+            if not poll.victor_answer:
+                await self.bot.send_error_message("No victor answer found in poll")
+                return
 
-        # Find the winning format
-        if not poll.victor_answer:
-            await self.bot.send_error_message("No victor answer found in poll")
-            return
-
-        winning_format = poll.victor_answer.text
-
-        await self.create_event_for_format(winning_format)
-
-        # Reset the active poll ID
-        self.active_poll_id = None
+            winning_format = poll.victor_answer.text.strip("**")
+            await self.create_event_for_format(winning_format)
+        finally:
+            # Reset the active poll ID
+            self.active_poll_id = None
 
     async def create_event_for_format(self, format_name: str):
         """Create a Discord event for the winning format."""
