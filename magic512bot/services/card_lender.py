@@ -71,7 +71,7 @@ def return_cardloans(
     parameters. If multiple rows are returned for a given card, decrements
     earliest matching rows first.
 
-    Deletes card from CardLoan table if cards's quantity would become 0.
+    Deletes card from CardLoan table if card's quantity would become 0.
 
     Throws CardNotFoundError if card not found in loans table, or quantity would
     become < 0.
@@ -82,7 +82,7 @@ def return_cardloans(
     not_found_errors = []
     total_return_count = 0
 
-    for card_name, quantity_to_return in loans_to_return.items():
+    for card_name, requested_quantity in loans_to_return.items():
         card_query_stmt = select(CardLoan).where(
             CardLoan.card == card_name,
             CardLoan.lender == lender,
@@ -96,21 +96,31 @@ def return_cardloans(
         ).all()
         total_loaned_count = sum(card_loan.quantity for card_loan in result)
 
-        if total_loaned_count < quantity_to_return:
-            not_found_errors.append((card_name, quantity_to_return))
+        if total_loaned_count < requested_quantity:
+            not_found_errors.append((card_name, requested_quantity))
             continue
 
+        # Track remaining quantity to return as we process each loan
+        remaining_to_return = requested_quantity
+
         for card_loan in result:
-            if card_loan.quantity < quantity_to_return:
+            if card_loan.quantity <= remaining_to_return:
+                # Return the entire loan
                 total_return_count += card_loan.quantity
-                quantity_to_return -= card_loan.quantity
+                remaining_to_return -= card_loan.quantity
                 session.delete(card_loan)
             else:
-                card_loan.quantity -= quantity_to_return
-                total_return_count += quantity_to_return
+                # Return partial loan
+                card_loan.quantity -= remaining_to_return
+                total_return_count += remaining_to_return
+                remaining_to_return = 0
                 break
 
-    if len(not_found_errors) > 0:
+            # If we've returned all requested cards, stop processing
+            if remaining_to_return == 0:
+                break
+
+    if not_found_errors:
         raise CardNotFoundError(card_errors=not_found_errors)
 
     return total_return_count
@@ -158,7 +168,7 @@ def parse_cardlist(cardlist: list[str]) -> dict[str, int]:
     for line in cardlist:
         split = line.split(" ", 1)
 
-        if len(split) != 2:
+        if len(split) != 1:
             line_errors.append(line)
             continue
 

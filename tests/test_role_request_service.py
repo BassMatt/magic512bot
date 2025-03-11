@@ -41,7 +41,7 @@ def test_add_user_sweat_role_existing_user(db_session):
     db_session.add(user)
     db_session.commit()
 
-    print(f"\nBefore add_user_sweat_role:")
+    print("\nBefore add_user_sweat_role:")
     print(f"User ID: {user.id}, Name: {user.user_name}")
     print(f"Roles: {user.sweat_roles}")
 
@@ -49,7 +49,7 @@ def test_add_user_sweat_role_existing_user(db_session):
     add_user_sweat_role(db_session, 12345, "TestUser", "Role2")
 
     # Check if the role was added to the user object in memory
-    print(f"\nAfter add_user_sweat_role (before commit):")
+    print("\nAfter add_user_sweat_role (before commit):")
     user_in_session = db_session.query(User).filter_by(id=12345).first()
     print(f"User in session - Roles: {user_in_session.sweat_roles}")
     print(f"Original user object - Roles: {user.sweat_roles}")
@@ -58,7 +58,7 @@ def test_add_user_sweat_role_existing_user(db_session):
     db_session.commit()
 
     # Check after commit
-    print(f"\nAfter commit:")
+    print("\nAfter commit:")
     user_after_commit = db_session.query(User).filter_by(id=12345).first()
     print(f"User after commit - Roles: {user_after_commit.sweat_roles}")
     print(f"Original user object - Roles: {user.sweat_roles}")
@@ -67,7 +67,7 @@ def test_add_user_sweat_role_existing_user(db_session):
     # Refresh the session to ensure we get the latest data
     db_session.refresh(user)
 
-    print(f"\nAfter refresh:")
+    print("\nAfter refresh:")
     print(f"Refreshed user - Roles: {user.sweat_roles}")
 
     # Verify the role was added
