@@ -27,7 +27,7 @@ def add_user_sweat_role(
         if user.sweat_roles is None:
             user.sweat_roles = []
         if role_name not in user.sweat_roles:
-            user.sweat_roles = user.sweat_roles + [role_name]
+            user.sweat_roles = [*user.sweat_roles, role_name]
     else:
         user = User(id=user_id, user_name=user_name, sweat_roles=[role_name])
         session.add(user)

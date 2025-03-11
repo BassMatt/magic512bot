@@ -4,7 +4,6 @@ import discord
 import pytest
 
 from magic512bot.cogs.role_request import (
-    ALLOWED_ROLE_REQUESTS,
     RoleRequest,
     Roles,
     _process_user_milestone_roles,
