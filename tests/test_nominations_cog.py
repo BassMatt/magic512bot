@@ -423,6 +423,12 @@ async def test_create_event_for_format_success(mock_bot):
     # Verify create_scheduled_event was called
     mock_guild.create_scheduled_event.assert_called_once()
 
+    # Verify the format name is included in the event title
+    event_args = mock_guild.create_scheduled_event.call_args[1]
+    assert "name" in event_args
+    assert format_name in event_args["name"]
+    assert event_args["name"] == f"WC Wednesday: {format_name}"
+
     # Verify the channel.send was called
     mock_channel.send.assert_called_once()
 
@@ -456,8 +462,11 @@ async def test_create_event_for_format_forbidden(mock_bot):
     # Mock the send_error_message method
     mock_bot.send_error_message = AsyncMock()
 
+    # Use a string for the format name, not the built-in format function
+    format_name = "Modern"
+
     # Call the create_event_for_format method
-    await cog.create_event_for_format(format)
+    await cog.create_event_for_format(format_name)
 
     # Verify send_error_message was called
     mock_bot.send_error_message.assert_called_once()
@@ -484,8 +493,11 @@ async def test_create_event_for_format_exception(mock_bot):
     # Mock the send_error_message method
     mock_bot.send_error_message = AsyncMock()
 
+    # Use a string for the format name, not the built-in format function
+    format_name = "Modern"
+
     # Call the create_event_for_format method
-    await cog.create_event_for_format(format)
+    await cog.create_event_for_format(format_name)
 
     # Verify send_error_message was called
     mock_bot.send_error_message.assert_called_once()
