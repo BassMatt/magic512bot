@@ -118,10 +118,23 @@ class Nomination(commands.Cog):
                 add_nomination(
                     session=session, user_id=interaction.user.id, format=format
                 )
+                # Send a message to the user
                 await interaction.response.send_message(
                     f"✅ Your nomination for **{format}** has been recorded!",
                     ephemeral=True,
                 )
+
+                # Also send a message to the wc-wednesday channel
+                channel = self.bot.get_channel(WC_WEDNESDAY_CHANNEL_ID)
+                if channel and isinstance(channel, discord.TextChannel):
+                    await channel.send(
+                        f"🎲 **{interaction.user.display_name}** has nominated "
+                        f"**{format}**!"
+                    )
+                else:
+                    LOGGER.error(
+                        f"Could not find channel with ID {WC_WEDNESDAY_CHANNEL_ID}"
+                    )
             except ValueError as e:
                 await interaction.response.send_message(
                     f"❌ {e!s}",

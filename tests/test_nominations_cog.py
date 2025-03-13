@@ -38,18 +38,24 @@ async def test_nominate_command_success(nomination_cog, mock_interaction):
         with patch("magic512bot.cogs.nomination.get_user_nominations", return_value=[]):
             # Mock add_nomination
             with patch("magic512bot.cogs.nomination.add_nomination") as mock_add:
-                # Call the command
-                await cog.nominate.callback(cog, mock_interaction, "Modern")
+                # Mock the get_channel method to return None to skip channel message
+                with patch.object(cog.bot, "get_channel", return_value=None):
+                    # Call the command
+                    await cog.nominate.callback(cog, mock_interaction, "Modern")
 
-                # Verify add_nomination was called with the correct arguments
-                mock_add.assert_called_once()
-                assert mock_add.call_args[1]["user_id"] == mock_interaction.user.id
-                assert mock_add.call_args[1]["format"] == "Modern"
+                    # Verify add_nomination was called with the correct arguments
+                    mock_add.assert_called_once()
+                    assert mock_add.call_args[1]["user_id"] == mock_interaction.user.id
+                    assert mock_add.call_args[1]["format"] == "Modern"
 
-                # Verify the success message was sent
-                mock_interaction.response.send_message.assert_called_once()
-                message = mock_interaction.response.send_message.call_args[0][0]
-                assert "Your nomination for **Modern**" in message
+                    # Verify the success message was sent
+                    mock_interaction.response.send_message.assert_called_once()
+                    message = mock_interaction.response.send_message.call_args[0][0]
+                    assert "Your nomination for **Modern**" in message
+                    assert (
+                        mock_interaction.response.send_message.call_args[1]["ephemeral"]
+                        is True
+                    )
 
 
 @pytest.mark.asyncio
@@ -717,3 +723,83 @@ def test_is_nomination_period_active_implementation():
             assert result == expected, (
                 f"Failed for day={day}, hour={hour}, minute={minute}"
             )
+
+
+@pytest.mark.asyncio
+async def test_nominate_command_success_with_channel_message(
+    nomination_cog, mock_interaction, mock_bot
+) -> None:
+    """Test the nominate command sends a message to the channel after successful nomination."""
+    cog = nomination_cog
+
+    # Create a mock channel for the WC Wednesday channel
+    mock_channel = AsyncMock(spec=discord.TextChannel)
+    mock_channel.send = AsyncMock()
+    mock_bot.get_channel.return_value = mock_channel
+
+    # Mock is_nomination_period_active to return True
+    with patch(
+        "magic512bot.cogs.nomination.is_nomination_period_active", return_value=True
+    ):
+        # Mock get_user_nominations to return an empty list (user has no nominations yet)
+        with patch("magic512bot.cogs.nomination.get_user_nominations", return_value=[]):
+            # Mock add_nomination
+            with patch("magic512bot.cogs.nomination.add_nomination") as mock_add:
+                # Call the command
+                await cog.nominate.callback(cog, mock_interaction, "Modern")
+
+                # Verify add_nomination was called with the correct arguments
+                mock_add.assert_called_once()
+                assert mock_add.call_args[1]["user_id"] == mock_interaction.user.id
+                assert mock_add.call_args[1]["format"] == "Modern"
+
+                # Verify the success message was sent to the user
+                mock_interaction.response.send_message.assert_called_once()
+                user_message = mock_interaction.response.send_message.call_args[0][0]
+                assert "Your nomination for **Modern**" in user_message
+                assert (
+                    mock_interaction.response.send_message.call_args[1]["ephemeral"]
+                    is True
+                )
+
+                # Verify a message was sent to the WC Wednesday channel
+                mock_bot.get_channel.assert_called_once()
+                mock_channel.send.assert_called_once()
+                channel_message = mock_channel.send.call_args[0][0]
+                assert "has nominated" in channel_message
+                assert "Modern" in channel_message
+
+
+@pytest.mark.asyncio
+async def test_nominate_command_success_channel_not_found(
+    nomination_cog, mock_interaction, mock_bot
+):
+    """Test the nominate command when the channel is not found."""
+    cog = nomination_cog
+
+    # Mock get_channel to return None (channel not found)
+    mock_bot.get_channel.return_value = None
+
+    # Mock is_nomination_period_active to return True
+    with patch(
+        "magic512bot.cogs.nomination.is_nomination_period_active", return_value=True
+    ):
+        # Mock get_user_nominations to return an empty list (user has no nominations yet)
+        with patch("magic512bot.cogs.nomination.get_user_nominations", return_value=[]):
+            # Mock add_nomination
+            with patch("magic512bot.cogs.nomination.add_nomination") as mock_add:
+                # Call the command
+                await cog.nominate.callback(cog, mock_interaction, "Modern")
+
+                # Verify add_nomination was called with the correct arguments
+                mock_add.assert_called_once()
+
+                # Verify the success message was sent to the user
+                mock_interaction.response.send_message.assert_called_once()
+                user_message = mock_interaction.response.send_message.call_args[0][0]
+                assert "Your nomination for **Modern**" in user_message
+
+                # Verify get_channel was called but no channel message was sent
+                mock_bot.get_channel.assert_called_once()
+
+                # No need to check channel_message since the channel is not found
