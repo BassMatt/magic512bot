@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import discord
 import pytest
 import pytest_asyncio
+from sqlalchemy.orm import Session
 
 # Add the project root to the path so we can import modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -14,6 +15,7 @@ os.environ["DB_CONNECTION_STRING"] = "sqlite:///:memory:"
 os.environ["BOT_TOKEN"] = "test_token"
 
 from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
 from magic512bot.models import register_models
@@ -21,13 +23,13 @@ from magic512bot.models.base import Base
 
 
 @pytest.fixture
-def engine():
+def engine() -> Engine:
     """Create an in-memory SQLite database for testing."""
     return create_engine("sqlite:///:memory:")
 
 
 @pytest.fixture
-def tables(engine):
+def tables(engine) -> None:
     """Create all tables in the test database."""
     register_models()
     Base.metadata.create_all(engine)
@@ -36,7 +38,7 @@ def tables(engine):
 
 
 @pytest.fixture
-def db_session(engine, tables):
+def db_session(engine, tables) -> Session:
     """Create a new database session for a test."""
     connection = engine.connect()
     transaction = connection.begin()
@@ -46,7 +48,9 @@ def db_session(engine, tables):
     yield session
 
     session.close()
-    transaction.rollback()
+    # Only rollback if the transaction is still active
+    if transaction.is_active:
+        transaction.rollback()
     connection.close()
 
 
@@ -64,7 +68,7 @@ async def mock_bot():
 
 
 @pytest_asyncio.fixture
-async def mock_interaction():
+async def mock_interaction() -> discord.Interaction:
     """Create a mock Discord interaction for testing."""
     interaction = MagicMock()
     interaction.response = MagicMock()
@@ -93,7 +97,7 @@ async def mock_interaction():
 
 
 @pytest_asyncio.fixture
-async def mock_member():
+async def mock_member() -> discord.Member:
     """Create a mock Discord member for testing."""
     member = MagicMock(spec=discord.Member)
     member.id = 67890

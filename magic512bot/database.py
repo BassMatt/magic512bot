@@ -9,7 +9,7 @@ engine = create_engine(DB_CONNECTION_STRING, echo=True)  # type: ignore
 SessionLocal = sessionmaker(bind=engine)
 
 
-def init_db():
+def init_db() -> bool:
     """
     Initialize the database, creating tables only if they don't exist.
     Returns True if successful, False if there was an error.

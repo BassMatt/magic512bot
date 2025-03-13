@@ -4,7 +4,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .base import Base
 
 
-class Nominations(Base):
+class Nomination(Base):
     __tablename__ = "nominations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

@@ -6,7 +6,7 @@ from magic512bot.database import SessionLocal, init_db
 
 
 class Magic512Bot(commands.Bot):
-    def __init__(self):
+    def __init__(self) -> None:
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
@@ -14,7 +14,7 @@ class Magic512Bot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
 
     # Syncs guild commands to specified guild
-    async def setup_hook(self):
+    async def setup_hook(self) -> None:
         LOGGER.info("Starting setup_hook")
 
         init_db()
@@ -24,7 +24,7 @@ class Magic512Bot(commands.Bot):
         await self.load_cogs()
         await self.sync_commands()
 
-    async def load_cogs(self):
+    async def load_cogs(self) -> None:
         LOGGER.info("Loading cogs")
         cog_modules = ["cogs.card_lender", "cogs.role_request", "cogs.nominations"]
 
@@ -37,7 +37,7 @@ class Magic512Bot(commands.Bot):
                 LOGGER.error(f"Failed to load cog {module}")
                 LOGGER.error(f"Error: {e!s}")
 
-    async def sync_commands(self):
+    async def sync_commands(self) -> None:
         LOGGER.info("Syncing commands")
         # For syncing to a specific guild (faster for testing)
         test_guild = discord.Object(id=TEST_GUILD_ID)
@@ -52,7 +52,7 @@ class Magic512Bot(commands.Bot):
             await self.tree.sync()
             LOGGER.info("Synced commands globally")
 
-    async def on_ready(self):
+    async def on_ready(self) -> None:
         LOGGER.info(f"{self.user} has connected!")
 
     async def send_error_message(self, error_message: str) -> bool:
@@ -101,7 +101,7 @@ class Magic512Bot(commands.Bot):
             return False
 
 
-async def main():
+async def main() -> None:
     # Create bot instance
     bot = Magic512Bot()
 

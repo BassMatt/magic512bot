@@ -2,36 +2,47 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from magic512bot.config import LOGGER
-from magic512bot.models.nominations import Nominations
+from magic512bot.models.nomination import Nomination
 
 
 def add_nomination(session: Session, user_id: int, format: str) -> None:
-    """Add a format nomination to the database."""
+    """
+    Add a nomination for a user.
+
+    Args:
+        session: The database session
+        user_id: The Discord user ID
+        format: The format being nominated
+
+    Raises:
+        ValueError: If the format is too long
+    """
+    # Validate format length
+    if len(format) > 55:
+        raise ValueError("Format is too long. Please keep it under 55 characters.")
+
     try:
-        if len(format) > 55:
-            raise ValueError("Format is too long")
-        # Check if user already has a nomination
-        existing = session.execute(
-            select(Nominations).where(Nominations.user_id == user_id)
-        ).scalar_one_or_none()
+        # Check if the user already has a nomination
+        stmt = select(Nomination).where(Nomination.user_id == user_id)
+        result = session.execute(stmt)
+        existing = result.scalars().first()
 
         if existing:
             # Update existing nomination
             existing.format = format
         else:
             # Create new nomination
-            nomination = Nominations(user_id=user_id, format=format)
+            nomination = Nomination(user_id=user_id, format=format)
             session.add(nomination)
-
     except Exception as e:
         LOGGER.error(f"Error adding nomination for user {user_id}: {e!s}")
         raise
 
 
-def get_all_nominations(session: Session) -> list[Nominations]:
+def get_all_nominations(session: Session) -> list[Nomination]:
     """Get all nominations from the database."""
     try:
-        query = select(Nominations)
+        query = select(Nomination)
         result = session.execute(query).scalars().all()
         return list(result)
     except Exception as e:
@@ -39,7 +50,7 @@ def get_all_nominations(session: Session) -> list[Nominations]:
         return []
 
 
-def get_user_nominations(session: Session, user_id: int) -> list[Nominations]:
+def get_user_nominations(session: Session, user_id: int) -> list[Nomination]:
     """Get all nominations from a specific user.
 
     Parameters
@@ -51,11 +62,11 @@ def get_user_nominations(session: Session, user_id: int) -> list[Nominations]:
 
     Returns
     -------
-    list[Nominations]
+    list[Nomination]
         A list of the user's nominations
     """
     try:
-        query = select(Nominations).where(Nominations.user_id == user_id)
+        query = select(Nomination).where(Nomination.user_id == user_id)
         result = session.execute(query).scalars().all()
         return list(result)
     except Exception as e:
@@ -72,7 +83,7 @@ def clear_all_nominations(session: Session) -> int:
         The number of nominations cleared
     """
     try:
-        stmt = delete(Nominations)
+        stmt = delete(Nomination)
         result = session.execute(stmt)
         return result.rowcount
     except Exception as e:

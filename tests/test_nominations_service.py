@@ -4,8 +4,8 @@ import pytest
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from magic512bot.models.nominations import Nominations
-from magic512bot.services.nominations import (
+from magic512bot.models.nomination import Nomination
+from magic512bot.services.nomination import (
     add_nomination,
     clear_all_nominations,
     get_all_nominations,
@@ -20,7 +20,7 @@ def test_add_nomination_new_user(db_session: Session) -> None:
     db_session.commit()
 
     # Verify the nomination was added
-    nominations = db_session.query(Nominations).all()
+    nominations = db_session.query(Nomination).all()
     assert len(nominations) == 1
     assert nominations[0].user_id == 12345
     assert nominations[0].format == "Modern"
@@ -37,7 +37,7 @@ def test_add_nomination_existing_user(db_session: Session) -> None:
     db_session.commit()
 
     # Verify the nomination was updated
-    nominations = db_session.query(Nominations).all()
+    nominations = db_session.query(Nomination).all()
     assert len(nominations) == 1
     assert nominations[0].user_id == 12345
     assert nominations[0].format == "Standard"
@@ -52,7 +52,7 @@ def test_add_nomination_multiple_users(db_session: Session) -> None:
         db_session.commit()
 
     # Verify both nominations were added
-    nominations = db_session.query(Nominations).all()
+    nominations = db_session.query(Nomination).all()
     assert len(nominations) == 2
 
     # Sort by user_id to ensure consistent test results

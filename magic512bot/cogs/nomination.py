@@ -1,4 +1,5 @@
 import datetime
+from enum import Enum
 
 import discord
 from discord import app_commands
@@ -6,26 +7,65 @@ from discord.ext import commands, tasks
 
 from magic512bot.config import LOGGER, WC_WEDNESDAY_CHANNEL_ID
 from magic512bot.main import Magic512Bot
-from magic512bot.services.nominations import (
+from magic512bot.services.nomination import (
     add_nomination,
     clear_all_nominations,
     get_all_nominations,
     get_user_nominations,
 )
 
-THURSDAY = 3
-SUNDAY = 6
+
+class Weekday(Enum):
+    MONDAY = 0
+    TUESDAY = 1
+    WEDNESDAY = 2
+    THURSDAY = 3
+    FRIDAY = 4
+    SATURDAY = 5
+    SUNDAY = 6
+
+
+MORNING_HOUR = 9
 MAX_USER_NOMINATIONS = 2
 
 
-class Nominations(commands.Cog):
+def is_nomination_period_active() -> bool:
+    """
+    Check if the nomination period is currently active.
+    Nominations are open from Thursday 9:00 AM to Sunday 9:00 AM.
+    """
+    now = datetime.datetime.now()
+    current_day = now.weekday()
+    current_hour = now.hour
+    current_minute = now.minute
+
+    # Check if it's Thursday after 9:00 AM
+    if current_day == Weekday.THURSDAY.value and (
+        current_hour > MORNING_HOUR
+        or (current_hour == MORNING_HOUR and current_minute >= 0)
+    ):
+        return True
+    # Check if it's Friday or Saturday (all day)
+    elif current_day in [Weekday.FRIDAY.value, Weekday.SATURDAY.value]:
+        return True
+    # Check if it's Sunday before 9:00 AM
+    elif current_day == Weekday.SUNDAY.value and (
+        current_hour < MORNING_HOUR
+        or (current_hour == MORNING_HOUR and current_minute == 0)
+    ):
+        return True
+
+    return False
+
+
+class Nomination(commands.Cog):
     def __init__(self, bot: Magic512Bot):
         self.bot: Magic512Bot = bot
         LOGGER.info("Nominations Cog Initialized")
         # Track the last run dates to ensure we only run once per day
         self.last_thursday_run = None
         self.last_sunday_run = None
-        self.can_nominate = False
+
         # Store the active poll ID
         self.active_poll_id = None
         # Start the daily check
@@ -36,7 +76,7 @@ class Nominations(commands.Cog):
 
     @app_commands.command(name="nominate", description="Nominate a format to play next")
     @app_commands.describe(format="The format you want to nominate")
-    async def nominate(self, interaction: discord.Interaction, format: str):
+    async def nominate(self, interaction: discord.Interaction, format: str) -> None:
         """Nominate a format to play next."""
         # Explicitly cast interaction.user to Member
         if not isinstance(interaction.user, discord.Member):
@@ -45,9 +85,12 @@ class Nominations(commands.Cog):
             )
             return
 
-        if not self.can_nominate:
+        # Check if nominations are currently open
+        if not is_nomination_period_active():
             await interaction.response.send_message(
-                "Nominations are not currently open.", ephemeral=True
+                "Nominations are currently closed. "
+                "Nominations are open from Thursday 9:00 AM to Sunday 9:00 AM.",
+                ephemeral=True,
             )
             return
 
@@ -92,29 +135,29 @@ class Nominations(commands.Cog):
                 )
 
     @tasks.loop(time=datetime.time(hour=9, minute=0))  # Run at 9:00 AM every day
-    async def daily_check(self):
+    async def daily_check(self) -> None:
         """Check if we need to run weekly tasks today."""
         now = datetime.datetime.now()
         today = now.date()
 
         # Thursday - Open nominations
-        if now.weekday() == THURSDAY and self.last_thursday_run != today:
-            await self.open_nominations()
+        if now.weekday() == Weekday.THURSDAY.value and self.last_thursday_run != today:
+            await self.send_nominations_open_message()
             self.last_thursday_run = today
             LOGGER.info(f"Ran Thursday task on {today}")
 
         # Sunday - Create poll
-        elif now.weekday() == SUNDAY and self.last_sunday_run != today:
+        elif now.weekday() == Weekday.SUNDAY.value and self.last_sunday_run != today:
             await self.create_poll()
             self.last_sunday_run = today
             LOGGER.info(f"Ran Sunday task on {today}")
 
     @daily_check.before_loop
-    async def before_daily_check(self):
+    async def before_daily_check(self) -> None:
         """Wait until the bot is ready before starting the scheduler."""
         await self.bot.wait_until_ready()
 
-    async def open_nominations(self):
+    async def send_nominations_open_message(self) -> None:
         """Send a message to open nominations."""
         channel = self.bot.get_channel(WC_WEDNESDAY_CHANNEL_ID)
         if not channel or not isinstance(channel, discord.TextChannel):
@@ -135,9 +178,7 @@ class Nominations(commands.Cog):
         await channel.send(embed=embed)
         LOGGER.info("Sent nominations open message")
 
-        self.can_nominate = True
-
-    async def create_poll(self):
+    async def create_poll(self) -> None:
         """Create a poll with all nominations."""
         channel = self.bot.get_channel(WC_WEDNESDAY_CHANNEL_ID)
         if not channel or not isinstance(channel, discord.TextChannel):
@@ -191,7 +232,7 @@ class Nominations(commands.Cog):
             LOGGER.info(f"Created poll with {len(unique_formats)} format options")
 
     @commands.Cog.listener()
-    async def on_poll_end(self, poll: discord.Poll):
+    async def on_poll_end(self, poll: discord.Poll) -> None:
         """Handle poll end event."""
         # Check if this poll is from a message we're tracking
         if (
@@ -208,13 +249,13 @@ class Nominations(commands.Cog):
                 await self.bot.send_error_message("No victor answer found in poll")
                 return
 
-            winning_format = poll.victor_answer.text.strip("**")
-            await self.create_event_for_format(winning_format)
+            winning_format = poll.victor_answer.text
+            await self.create_event_for_format(winning_format.strip("**"))
         finally:
             # Reset the active poll ID
             self.active_poll_id = None
 
-    async def create_event_for_format(self, format_name: str):
+    async def create_event_for_format(self, format_name: str) -> None:
         """Create a Discord event for the winning format."""
         # Get the channel's guild
         channel = self.bot.get_channel(WC_WEDNESDAY_CHANNEL_ID)
@@ -270,4 +311,4 @@ class Nominations(commands.Cog):
 
 
 async def setup(bot: Magic512Bot) -> None:
-    await bot.add_cog(Nominations(bot))
+    await bot.add_cog(Nomination(bot))
