@@ -26,7 +26,7 @@ class Magic512Bot(commands.Bot):
 
     async def load_cogs(self) -> None:
         LOGGER.info("Loading cogs")
-        cog_modules = ["cogs.card_lender", "cogs.role_request", "cogs.nominations"]
+        cog_modules = ["cogs.card_lender", "cogs.role_request", "cogs.nomination"]
 
         for module in cog_modules:
             try:
