@@ -30,6 +30,7 @@ SWEAT_ROLES = {
     "Pauper Sweat": 1333302285404471409,
     "Cube Sweat": 1333300770891759637,
     "Limited Sweat": 1333300276781645836,
+    "Value Sweat": 1349569141698203649,
 }
 
 MILESTONE_ROLES = {
@@ -64,6 +65,7 @@ class Roles(StrEnum):
     PAUPER_SWEAT = "Pauper Sweat"
     CUBE_SWEAT = "Cube Sweat"
     LIMITED_SWEAT = "Limited Sweat"
+    VALUE_SWEAT = "Value Sweat"
 
     SWEAT_KNIGHT = "Sweat Knight"  # 3 sweats
     SWEAT_LORD = "Sweat Lord"  # 5 sweats
@@ -87,7 +89,7 @@ class RoleRequestView(discord.ui.View):
     @discord.ui.button(label="Approve", style=discord.ButtonStyle.green)
     async def approve(
         self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
+    ) -> None:
         # Get the role and member
         if not (guild := interaction.guild):
             await interaction.response.send_message(
@@ -148,7 +150,9 @@ class RoleRequestView(discord.ui.View):
             )
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.red)
-    async def deny(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def deny(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
         # Get the role and member
         if not (guild := interaction.guild):
             await interaction.response.send_message(
@@ -175,7 +179,7 @@ class RoleRequestView(discord.ui.View):
 
         self.disable_buttons()
 
-    def disable_buttons(self):
+    def disable_buttons(self) -> None:
         for item in self.children:
             if isinstance(item, discord.ui.Button):
                 item.disabled = True
@@ -190,7 +194,9 @@ class RoleRequest(commands.Cog):
     @app_commands.describe(to="the team member who will receive Monarch")
     @app_commands.checks.has_role(Roles.THE_MONARCH.value)
     @app_commands.guild_only()
-    async def give_monarch(self, interaction: discord.Interaction, to: discord.Member):
+    async def give_monarch(
+        self, interaction: discord.Interaction, to: discord.Member
+    ) -> None:
         # Ensure we're in a guild
         if not interaction.guild:
             await interaction.response.send_message(
@@ -335,7 +341,7 @@ class RoleRequest(commands.Cog):
     @app_commands.command(name="bootstrap-db")
     @app_commands.checks.has_role(Roles.MOD.value)
     @app_commands.guild_only()
-    async def bootstrap_db(self, interaction: discord.Interaction):
+    async def bootstrap_db(self, interaction: discord.Interaction) -> None:
         if not (guild := interaction.guild):
             await interaction.response.send_message(
                 "This command can only be used in a server!", ephemeral=True
@@ -358,7 +364,7 @@ class RoleRequest(commands.Cog):
 
     @app_commands.command(name="leaderboard")
     @app_commands.guild_only()
-    async def sweat_leaderboard(self, interaction: discord.Interaction):
+    async def sweat_leaderboard(self, interaction: discord.Interaction) -> None:
         if not interaction.guild:
             await interaction.response.send_message(
                 "This command can only be used in a server!", ephemeral=True
@@ -456,7 +462,7 @@ def _sync_user_sweat_roles(
     return user_db_sweat_roles
 
 
-async def _clear_user_sweat_milestones(member: discord.Member):
+async def _clear_user_sweat_milestones(member: discord.Member) -> None:
     for role in member.roles:
         if role.name in MILESTONE_ROLES.keys():
             await member.remove_roles(role)
@@ -464,7 +470,7 @@ async def _clear_user_sweat_milestones(member: discord.Member):
 
 async def _process_user_milestone_roles(
     member: discord.Member, guild: discord.Guild, db: sessionmaker[Session]
-):
+) -> None:
     sweat_role_count = 0
     with db.begin() as session:
         user_sweat_roles = get_user_sweat_roles(session=session, user_id=member.id)
