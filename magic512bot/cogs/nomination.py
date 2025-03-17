@@ -178,6 +178,8 @@ class Nomination(commands.Cog):
         with self.bot.db.begin() as session:
             last_thursday_run = get_last_run_date(session, "thursday_nominations")
             last_sunday_run = get_last_run_date(session, "sunday_poll")
+            LOGGER.info(f"Last Thursday run: {last_thursday_run}")
+            LOGGER.info(f"Last Sunday run: {last_sunday_run}")
 
             current_weekday = now.weekday()
 
@@ -213,18 +215,33 @@ class Nomination(commands.Cog):
                 current_weekday == Weekday.TUESDAY.value and current_time < morning_time
             )
 
+            LOGGER.info(
+                f"Poll creation conditions: sunday_after_9={is_sunday_after_morning}, "
+                f"is_monday={is_monday}, tuesday_before_9={is_tuesday_before_morning}"
+            )
+
             # Handle Sunday after 9AM or Monday (any time)
             if is_sunday_after_morning or is_monday:
+                LOGGER.info(
+                    f"In Sunday after 9AM/Monday window. Last run: {last_sunday_run}, Today: {today}"
+                )
                 if not last_sunday_run or last_sunday_run < today:
                     LOGGER.info("Running missed Sunday poll task")
                     await self.create_poll()
+                else:
+                    LOGGER.info("Poll already run today, skipping")
 
             # Handle Tuesday before 9AM
             elif is_tuesday_before_morning:
                 sunday_date = today - datetime.timedelta(days=2)
+                LOGGER.info(
+                    f"In Tuesday before 9AM window. Last run: {last_sunday_run}, Sunday date: {sunday_date}"
+                )
                 if not last_sunday_run or last_sunday_run < sunday_date:
                     LOGGER.info("Running missed Sunday poll task")
                     await self.create_poll()
+                else:
+                    LOGGER.info("Poll already run for this window, skipping")
 
     @tasks.loop(time=datetime.time(hour=MORNING_HOUR, minute=0))
     async def daily_check(self) -> None:
