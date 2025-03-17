@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 from enum import Enum
 
@@ -74,10 +75,19 @@ class Nomination(commands.Cog):
 
     async def cog_load(self) -> None:
         """Run when the cog is loaded to check for missed tasks."""
-        LOGGER.info("Checking for missed tasks on startup...")
-        await self.bot.wait_until_ready()  # Ensure bot is ready before checking
-        await self.check_missed_tasks()
-        LOGGER.info("Finished checking for missed tasks")
+        LOGGER.info("Nomination Cog: Waiting for the bot to be ready...")
+        try:
+            await asyncio.wait_for(
+                self.bot.wait_until_ready(), timeout=60.0
+            )  # Add timeout
+            LOGGER.info("Nomination Cog: Bot is ready, checking for missed tasks...")
+            await self.check_missed_tasks()
+            LOGGER.info("Nomination Cog: Finished checking for missed tasks")
+        except TimeoutError:
+            LOGGER.error("Nomination Cog: Bot failed to become ready after 60 seconds")
+            await self.bot.send_error_message(
+                "Nomination Cog: Bot failed to check missed tasks"
+            )
 
     def cog_unload(self) -> None:  # type: ignore
         """Cancel the daily check when the cog is unloaded."""
@@ -201,20 +211,23 @@ class Nomination(commands.Cog):
                     set_last_run_date(session, "thursday_nominations", thursday_date)
 
             # Check for missed poll creation (Sunday 9AM -> Tuesday 9AM)
-            if current_weekday in [Weekday.SUNDAY.value, Weekday.MONDAY.value]:
-                # If it's after 9AM on Sunday through Monday
-                if (
-                    current_weekday == Weekday.SUNDAY.value
-                    and current_time >= morning_time
-                ) or current_weekday == Weekday.MONDAY.value:
-                    if not last_sunday_run or last_sunday_run < today:
-                        LOGGER.info("Running missed Sunday poll task")
-                        await self.create_poll()
-                        set_last_run_date(session, "sunday_poll", today)
-            elif (
+            is_sunday_after_morning = (
+                current_weekday == Weekday.SUNDAY.value and current_time >= morning_time
+            )
+            is_monday = current_weekday == Weekday.MONDAY.value
+            is_tuesday_before_morning = (
                 current_weekday == Weekday.TUESDAY.value and current_time < morning_time
-            ):
-                # If it's before 9AM on Tuesday
+            )
+
+            # Handle Sunday after 9AM or Monday (any time)
+            if is_sunday_after_morning or is_monday:
+                if not last_sunday_run or last_sunday_run < today:
+                    LOGGER.info("Running missed Sunday poll task")
+                    await self.create_poll()
+                    set_last_run_date(session, "sunday_poll", today)
+
+            # Handle Tuesday before 9AM
+            elif is_tuesday_before_morning:
                 sunday_date = today - datetime.timedelta(days=2)
                 if not last_sunday_run or last_sunday_run < sunday_date:
                     LOGGER.info("Running missed Sunday poll task")
