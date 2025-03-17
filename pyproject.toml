@@ -19,6 +19,7 @@ dependencies = [
     "ruff>=0.3.3",
     "mypy>=1.15.0",
     "pytest-asyncio>=0.25.3",
+    "freezegun>=1.5.1",
 ]
 
 [build-system]
@@ -47,4 +48,12 @@ combine-as-imports = true
     "F401",    # Imported but unused
     "D103",    # Missing docstring in public function
     "PLR0913", # Too many arguments
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    "ignore::RuntimeWarning:discord.ext.tasks",
+    "ignore::pytest.PytestUnraisableExceptionWarning"
 ]

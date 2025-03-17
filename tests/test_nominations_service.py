@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
@@ -75,7 +75,7 @@ def test_add_nomination_error_handling(
     monkeypatch.setattr(db_session, "execute", mock_execute)
 
     # Attempt to add a nomination
-    with pytest.raises(Exception):  # Changed to catch any exception
+    with pytest.raises(SQLAlchemyError):
         add_nomination(db_session, user_id=12345, format="Modern")
 
 

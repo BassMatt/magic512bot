@@ -14,6 +14,12 @@ from magic512bot.services.nomination import (
     get_all_nominations,
     get_user_nominations,
 )
+from magic512bot.services.task_run import (
+    get_active_poll_id,
+    get_last_run_date,
+    set_active_poll_id,
+    set_last_run_date,
+)
 
 
 class Weekday(Enum):
@@ -63,16 +69,18 @@ class Nomination(commands.Cog):
     def __init__(self, bot: Magic512Bot):
         self.bot: Magic512Bot = bot
         LOGGER.info("Nominations Cog Initialized")
-        # Track the last run dates to ensure we only run once per day
-        self.last_thursday_run = None
-        self.last_sunday_run = None
-
-        # Store the active poll ID
-        self.active_poll_id = None
         # Start the daily check
         self.daily_check.start()
 
-    def cog_unload(self):  # type: ignore
+    async def cog_load(self) -> None:
+        """Run when the cog is loaded to check for missed tasks."""
+        LOGGER.info("Checking for missed tasks on startup...")
+        await self.bot.wait_until_ready()  # Ensure bot is ready before checking
+        await self.check_missed_tasks()
+        LOGGER.info("Finished checking for missed tasks")
+
+    def cog_unload(self) -> None:  # type: ignore
+        """Cancel the daily check when the cog is unloaded."""
         self.daily_check.cancel()
 
     @app_commands.command(name="nominate", description="Nominate a format to play next")
@@ -148,23 +156,92 @@ class Nomination(commands.Cog):
                     ephemeral=True,
                 )
 
-    @tasks.loop(time=datetime.time(hour=9, minute=0))  # Run at 9:00 AM every day
+    async def check_missed_tasks(self) -> None:
+        """
+        Check if any tasks were missed while the bot was down.
+
+        Windows for missed tasks:
+        - Nominations: Thursday 9AM -> Sunday 9AM
+        - Poll Creation: Sunday 9AM -> Tuesday 9AM
+        """
+        now = datetime.datetime.now()
+        today = now.date()
+        current_time = now.time()
+        morning_time = datetime.time(hour=MORNING_HOUR, minute=0)
+
+        with self.bot.db.begin() as session:
+            last_thursday_run = get_last_run_date(session, "thursday_nominations")
+            last_sunday_run = get_last_run_date(session, "sunday_poll")
+
+            current_weekday = now.weekday()
+
+            # Check for missed nomination opening (Thursday 9AM -> Sunday 9AM)
+            if current_weekday in [
+                Weekday.THURSDAY.value,
+                Weekday.FRIDAY.value,
+                Weekday.SATURDAY.value,
+            ]:
+                # If it's after 9AM on Thursday through Saturday
+                if (
+                    current_weekday == Weekday.THURSDAY.value
+                    and current_time >= morning_time
+                ) or current_weekday in [Weekday.FRIDAY.value, Weekday.SATURDAY.value]:
+                    if not last_thursday_run or last_thursday_run < today:
+                        LOGGER.info("Running missed Thursday nominations task")
+                        await self.send_nominations_open_message()
+                        set_last_run_date(session, "thursday_nominations", today)
+            elif (
+                current_weekday == Weekday.SUNDAY.value and current_time < morning_time
+            ):
+                # If it's before 9AM on Sunday
+                thursday_date = today - datetime.timedelta(days=3)
+                if not last_thursday_run or last_thursday_run < thursday_date:
+                    LOGGER.info("Running missed Thursday nominations task")
+                    await self.send_nominations_open_message()
+                    set_last_run_date(session, "thursday_nominations", thursday_date)
+
+            # Check for missed poll creation (Sunday 9AM -> Tuesday 9AM)
+            if current_weekday in [Weekday.SUNDAY.value, Weekday.MONDAY.value]:
+                # If it's after 9AM on Sunday through Monday
+                if (
+                    current_weekday == Weekday.SUNDAY.value
+                    and current_time >= morning_time
+                ) or current_weekday == Weekday.MONDAY.value:
+                    if not last_sunday_run or last_sunday_run < today:
+                        LOGGER.info("Running missed Sunday poll task")
+                        await self.create_poll()
+                        set_last_run_date(session, "sunday_poll", today)
+            elif (
+                current_weekday == Weekday.TUESDAY.value and current_time < morning_time
+            ):
+                # If it's before 9AM on Tuesday
+                sunday_date = today - datetime.timedelta(days=2)
+                if not last_sunday_run or last_sunday_run < sunday_date:
+                    LOGGER.info("Running missed Sunday poll task")
+                    await self.create_poll()
+                    set_last_run_date(session, "sunday_poll", sunday_date)
+
+    @tasks.loop(time=datetime.time(hour=MORNING_HOUR, minute=0))
     async def daily_check(self) -> None:
         """Check if we need to run weekly tasks today."""
         now = datetime.datetime.now()
         today = now.date()
 
-        # Thursday - Open nominations
-        if now.weekday() == Weekday.THURSDAY.value and self.last_thursday_run != today:
-            await self.send_nominations_open_message()
-            self.last_thursday_run = today
-            LOGGER.info(f"Ran Thursday task on {today}")
+        with self.bot.db.begin() as session:
+            last_thursday_run = get_last_run_date(session, "thursday_nominations")
+            last_sunday_run = get_last_run_date(session, "sunday_poll")
 
-        # Sunday - Create poll
-        elif now.weekday() == Weekday.SUNDAY.value and self.last_sunday_run != today:
-            await self.create_poll()
-            self.last_sunday_run = today
-            LOGGER.info(f"Ran Sunday task on {today}")
+            # Thursday - Open nominations
+            if now.weekday() == Weekday.THURSDAY.value and last_thursday_run != today:
+                await self.send_nominations_open_message()
+                set_last_run_date(session, "thursday_nominations", today)
+                LOGGER.info(f"Ran Thursday task on {today}")
+
+            # Sunday - Create poll
+            elif now.weekday() == Weekday.SUNDAY.value and last_sunday_run != today:
+                await self.create_poll()
+                set_last_run_date(session, "sunday_poll", today)
+                LOGGER.info(f"Ran Sunday task on {today}")
 
     @daily_check.before_loop
     async def before_daily_check(self) -> None:
@@ -231,8 +308,8 @@ class Nomination(commands.Cog):
                 content="# 🗳️ Format Voting 🗳️\n\nVote for next week's format!", poll=poll
             )
 
-            # Store the poll ID for later reference
-            self.active_poll_id = poll_message.id
+            # Store the poll ID in the database
+            set_active_poll_id(session, poll_message.id)
 
             # Store the next Wednesday date for event creation
             self.next_wednesday = next_wednesday
@@ -242,32 +319,34 @@ class Nomination(commands.Cog):
 
             # Clear nominations after creating poll
             clear_all_nominations(session)
-            self.can_nominate = False  # Close Nominations (until next thursday)
             LOGGER.info(f"Created poll with {len(unique_formats)} format options")
 
     @commands.Cog.listener()
     async def on_poll_end(self, poll: discord.Poll) -> None:
         """Handle poll end event."""
-        # Check if this poll is from a message we're tracking
-        if (
-            not hasattr(poll, "message")
-            or not poll.message
-            or poll.message.id != self.active_poll_id
-        ):
-            return
+        with self.bot.db.begin() as session:
+            active_poll_id = get_active_poll_id(session)
 
-        LOGGER.info("Format voting poll has ended. Processing results...")
-        try:
-            # Find the winning format
-            if not poll.victor_answer:
-                await self.bot.send_error_message("No victor answer found in poll")
+            # Check if this poll is from a message we're tracking
+            if (
+                not hasattr(poll, "message")
+                or not poll.message
+                or poll.message.id != active_poll_id
+            ):
                 return
 
-            winning_format = poll.victor_answer.text
-            await self.create_event_for_format(winning_format.strip("*"))
-        finally:
-            # Reset the active poll ID
-            self.active_poll_id = None
+            LOGGER.info("Format voting poll has ended. Processing results...")
+            try:
+                # Find the winning format
+                if not poll.victor_answer:
+                    await self.bot.send_error_message("No victor answer found in poll")
+                    return
+
+                winning_format = poll.victor_answer.text
+                await self.create_event_for_format(winning_format.strip("*"))
+            finally:
+                # Reset the active poll ID in the database
+                set_active_poll_id(session, None)
 
     async def create_event_for_format(self, format_name: str) -> None:
         """Create a Discord event for the winning format."""
@@ -325,4 +404,5 @@ class Nomination(commands.Cog):
 
 
 async def setup(bot: Magic512Bot) -> None:
+    """Load the Nomination cog."""
     await bot.add_cog(Nomination(bot))
