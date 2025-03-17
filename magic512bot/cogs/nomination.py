@@ -8,6 +8,7 @@ from discord.ext import commands, tasks
 from magic512bot.config import LOGGER, WC_WEDNESDAY_CHANNEL_ID
 from magic512bot.main import Magic512Bot
 from magic512bot.services.nomination import (
+    MAX_NOMINATION_LENGTH,
     add_nomination,
     clear_all_nominations,
     get_all_nominations,
@@ -71,7 +72,7 @@ class Nomination(commands.Cog):
         # Start the daily check
         self.daily_check.start()
 
-    def cog_unload(self):
+    def cog_unload(self):  # type: ignore
         self.daily_check.cancel()
 
     @app_commands.command(name="nominate", description="Nominate a format to play next")
@@ -94,7 +95,7 @@ class Nomination(commands.Cog):
             )
             return
 
-        if len(format) > 55:
+        if len(format) > MAX_NOMINATION_LENGTH:
             await interaction.response.send_message(
                 "Format is too long. Please keep it under 55 characters.",
                 ephemeral=True,
@@ -263,7 +264,7 @@ class Nomination(commands.Cog):
                 return
 
             winning_format = poll.victor_answer.text
-            await self.create_event_for_format(winning_format.strip("**"))
+            await self.create_event_for_format(winning_format.strip("*"))
         finally:
             # Reset the active poll ID
             self.active_poll_id = None

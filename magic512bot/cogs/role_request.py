@@ -395,20 +395,19 @@ class RoleRequest(commands.Cog):
         leaderboard_text = []
         for count in sorted(count_to_members.keys(), reverse=True):
             members = count_to_members[count]
-            mentions = " ".join(
-                member.mention
+            display_names = ", ".join(
+                f"**{member.display_name}**"
                 for member in sorted(members, key=lambda m: m.display_name)
             )
-            leaderboard_text.append(f"**{count} roles**: {mentions}")
+            role_text = "role" if count == 1 else "roles"
+            leaderboard_text.append(f"**{count} {role_text}**: {display_names}")
 
         if leaderboard_text:
             embed.description = "\n".join(leaderboard_text)
         else:
             embed.description = "No sweat roles found! 💨"
 
-        await interaction.response.send_message(
-            embed=embed, allowed_mentions=discord.AllowedMentions.none()
-        )
+        await interaction.response.send_message(embed=embed)
 
 
 async def setup(bot: Magic512Bot) -> None:

@@ -6,7 +6,7 @@ authors = [
     {name = "bassmatt", email = "bassmatt0515@gmail.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "discord-py>=2.4.0",
     "python-dotenv>=1.0.1",
@@ -19,7 +19,6 @@ dependencies = [
     "ruff>=0.3.3",
     "mypy>=1.15.0",
     "pytest-asyncio>=0.25.3",
-    "types-sqlalchemy>=1.4.53.38",
 ]
 
 [build-system]
@@ -28,7 +27,6 @@ build-backend = "hatchling.build"
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
 fix = true
 
 [tool.ruff.lint]
@@ -50,18 +48,3 @@ combine-as-imports = true
     "D103",    # Missing docstring in public function
     "PLR0913", # Too many arguments
 ]
-
-[tool.mypy]
-python_version = "3.13"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-
-# Ignore missing imports for third-party libraries
-[[tool.mypy.overrides]]
-module = [
-    "pytest.*",
-    "sqlalchemy.*",
-]
-ignore_missing_imports = true

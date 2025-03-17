@@ -168,7 +168,7 @@ def parse_cardlist(cardlist: list[str]) -> dict[str, int]:
     for line in cardlist:
         split = line.split(" ", 1)
 
-        if len(split) != 2:
+        if len(split) != 2:  # noqa: PLR2004
             line_errors.append(line)
             continue
 

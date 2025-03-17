@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from magic512bot.config import LOGGER
 from magic512bot.models.nomination import Nomination
 
+MAX_NOMINATION_LENGTH = 55
+
 
 def add_nomination(session: Session, user_id: int, format: str) -> None:
     """
@@ -18,7 +20,7 @@ def add_nomination(session: Session, user_id: int, format: str) -> None:
         ValueError: If the format is too long
     """
     # Validate format length
-    if len(format) > 55:
+    if len(format) > MAX_NOMINATION_LENGTH:
         raise ValueError("Format is too long. Please keep it under 55 characters.")
 
     try:

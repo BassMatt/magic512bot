@@ -154,40 +154,87 @@ async def test_bootstrap_db(mock_bot, mock_interaction):
 
 
 @pytest.mark.asyncio
-async def test_sweat_leaderboard(mock_bot, mock_interaction):
-    """Test the sweat_leaderboard command."""
-    cog = RoleRequest(mock_bot)
+async def test_sweat_leaderboard(mock_interaction):
+    """Test the sweat leaderboard command."""
+    cog = RoleRequest(mock_interaction.client)
 
-    # Setup mock members with roles
+    # Create mock guild and members
+    mock_guild = MagicMock(spec=discord.Guild)
+    mock_interaction.guild = mock_guild
+
+    # Create mock roles with proper name attribute setup
+    modern_sweat = MagicMock(spec=discord.Role)
+    modern_sweat.name = "Modern Sweat"  # Set name as attribute, not constructor param
+    legacy_sweat = MagicMock(spec=discord.Role)
+    legacy_sweat.name = "Legacy Sweat"
+    normal_role = MagicMock(spec=discord.Role)
+    normal_role.name = "Not a sweat role"
+
+    # Create mock members with different numbers of sweat roles
     member1 = MagicMock(spec=discord.Member)
+    member1.display_name = "Alpha"
     member1.bot = False
-    role1 = MagicMock(spec=discord.Role)
-    role1.name = "Standard Sweat"
-    role2 = MagicMock(spec=discord.Role)
-    role2.name = "Modern Sweat"
-    member1.roles = [role1, role2]
-    member1.display_name = "Member1"
-    member1.mention = "<@123>"
+    member1.roles = [modern_sweat, legacy_sweat]
 
     member2 = MagicMock(spec=discord.Member)
+    member2.display_name = "Beta"
     member2.bot = False
-    member2.roles = [role1]
-    member2.display_name = "Member2"
-    member2.mention = "<@456>"
+    member2.roles = [modern_sweat]
 
-    # Add members to the guild
-    mock_interaction.guild.members = [member1, member2]
+    member3 = MagicMock(spec=discord.Member)
+    member3.display_name = "Charlie"
+    member3.bot = False
+    member3.roles = [normal_role]
 
-    # Mock SWEAT_ROLES to include our test roles
-    with patch(
-        "magic512bot.cogs.role_request.SWEAT_ROLES",
-        {"Standard Sweat": 1, "Modern Sweat": 2},
-    ):
-        # Call the callback method directly
-        await cog.sweat_leaderboard.callback(cog, mock_interaction)
+    # Add members to guild
+    mock_guild.members = [member1, member2, member3]
 
-        # Verify a response was sent
-        mock_interaction.response.send_message.assert_called_once()
+    # Call the command's callback method
+    await cog.sweat_leaderboard.callback(cog, mock_interaction)
+
+    # Verify the response
+    mock_interaction.response.send_message.assert_called_once()
+
+    # Get the embed from the call arguments
+    call_args = mock_interaction.response.send_message.call_args
+    embed = call_args[1]["embed"]
+
+    # Verify embed contents
+    assert "Sweat Role Leaderboard" in embed.title
+    assert "**2 roles**: **Alpha**" in embed.description
+    assert "**1 role**: **Beta**" in embed.description  # Fixed grammar for single role
+    assert embed.color == discord.Color.blue()
+
+
+@pytest.mark.asyncio
+async def test_sweat_leaderboard_no_roles(mock_interaction):
+    """Test the sweat leaderboard command when no one has sweat roles."""
+    cog = RoleRequest(mock_interaction.client)
+
+    # Create mock guild and members
+    mock_guild = MagicMock(spec=discord.Guild)
+    mock_interaction.guild = mock_guild
+
+    # Create mock member with no sweat roles
+    member = MagicMock(spec=discord.Member)
+    member.bot = False
+    member.roles = [MagicMock(name="Not a sweat role")]
+
+    # Add member to guild
+    mock_guild.members = [member]
+
+    # Call the command's callback method
+    await cog.sweat_leaderboard.callback(cog, mock_interaction)
+
+    # Verify the response
+    mock_interaction.response.send_message.assert_called_once()
+
+    # Get the embed from the call arguments
+    call_args = mock_interaction.response.send_message.call_args
+    embed = call_args[1]["embed"]
+
+    # Verify embed contents
+    assert "No sweat roles found!" in embed.description
 
 
 def test_sync_user_sweat_roles(mock_member, db_session):
