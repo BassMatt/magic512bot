@@ -348,15 +348,11 @@ async def test_check_missed_tasks_poll_monday(
             "magic512bot.cogs.nomination.get_last_run_date",
             return_value=datetime.now().date() - timedelta(days=1),
         ),
-        patch("magic512bot.cogs.nomination.set_last_run_date") as mock_set_date,
     ):
         cog.create_poll = AsyncMock()
         await cog.check_missed_tasks()
 
         cog.create_poll.assert_called_once()
-        mock_set_date.assert_called_once_with(
-            mock_session, "sunday_poll", datetime.now().date()
-        )
 
 
 @pytest.mark.asyncio
@@ -374,7 +370,6 @@ async def test_check_missed_tasks_nominations_saturday(
         patch("discord.ext.tasks.Loop.after_loop"),
         patch("magic512bot.cogs.nomination.tasks.datetime") as mock_tasks_dt,
         patch("magic512bot.cogs.nomination.get_last_run_date", return_value=None),
-        patch("magic512bot.cogs.nomination.set_last_run_date") as mock_set_date,
     ):
         mock_tasks_dt.now = MagicMock(return_value=datetime(2024, 3, 16, 10, 0))
         mock_tasks_dt.datetime = datetime
@@ -383,9 +378,6 @@ async def test_check_missed_tasks_nominations_saturday(
         await cog.check_missed_tasks()
 
         cog.send_nominations_open_message.assert_called_once()
-        mock_set_date.assert_called_once_with(
-            mock_session, "thursday_nominations", datetime(2024, 3, 16).date()
-        )
 
 
 @pytest.mark.asyncio
@@ -401,28 +393,34 @@ async def test_check_missed_tasks_poll_tuesday_before_9am(
     current_date = datetime.now().date()
     logger.debug(f"Current frozen date: {current_date} (type: {type(current_date)})")
 
-    cog.create_poll = AsyncMock()
+    # Mock the channel
+    mock_channel = AsyncMock(spec=discord.TextChannel)
+    mock_channel.send = AsyncMock()
+    cog.bot.get_channel = MagicMock(return_value=mock_channel)
+
+    # Create a spy version of create_poll that will actually call through
+    original_create_poll = cog.create_poll
+
+    async def spy_create_poll():
+        await original_create_poll()
+
+    cog.create_poll = AsyncMock(side_effect=spy_create_poll)
+
     with (
         patch("magic512bot.cogs.nomination.get_last_run_date", return_value=None),
         patch("magic512bot.cogs.nomination.set_last_run_date") as mock_set_date,
+        patch(
+            "magic512bot.cogs.nomination.get_all_nominations",
+            return_value=[MagicMock(format="Modern")],
+        ),
     ):
         await cog.check_missed_tasks()
 
         cog.create_poll.assert_called_once()
-
-        if mock_set_date.call_args:
-            actual_date = mock_set_date.call_args[0][2]
-            logger.debug(
-                f"Actual date in call: {actual_date} (type: {type(actual_date)})"
-            )
-
-        actual_call = mock_set_date.call_args
-        assert actual_call is not None
-        actual_date = actual_call[0][2]
         mock_set_date.assert_called_once_with(
             mock_session,
             "sunday_poll",
-            date(actual_date.year, actual_date.month, actual_date.day),
+            current_date,  # This will be set by create_poll
         )
 
 
@@ -508,9 +506,6 @@ async def test_check_missed_tasks(
                         "magic512bot.cogs.nomination.get_last_run_date",
                         return_value=None,
                     ),
-                    patch(
-                        "magic512bot.cogs.nomination.set_last_run_date"
-                    ) as mock_set_date,
                 ):
                     await cog.check_missed_tasks()
 
@@ -525,23 +520,6 @@ async def test_check_missed_tasks(
                         mock_create_poll.assert_called_once()
                     else:
                         mock_create_poll.assert_not_called()
-
-                    # Check if task was recorded
-                    if expected_task_name:
-                        # Log the actual call arguments
-                        if mock_set_date.call_args:
-                            actual_call = mock_set_date.call_args
-                            assert actual_call is not None
-                            actual_date = actual_call[0][2]
-                            mock_set_date.assert_called_once_with(
-                                mock_bot.db.begin().__enter__(),
-                                expected_task_name,
-                                date(
-                                    actual_date.year, actual_date.month, actual_date.day
-                                ),
-                            )
-                    else:
-                        mock_set_date.assert_not_called()
 
 
 # Test data for daily checks
@@ -592,9 +570,6 @@ async def test_daily_check(
                         "magic512bot.cogs.nomination.get_last_run_date",
                         return_value=None,
                     ),
-                    patch(
-                        "magic512bot.cogs.nomination.set_last_run_date"
-                    ) as mock_set_date,
                 ):
                     await cog.daily_check()
 
@@ -605,16 +580,9 @@ async def test_daily_check(
                         else:
                             mock_create_poll.assert_called_once()
                             mock_send_nominations.assert_not_called()
-
-                        mock_set_date.assert_called_once_with(
-                            mock_bot.db.begin().__enter__(),
-                            expected_task_name,
-                            datetime.now().date(),
-                        )
                     else:
                         mock_send_nominations.assert_not_called()
                         mock_create_poll.assert_not_called()
-                        mock_set_date.assert_not_called()
 
 
 MISSED_TASKS_INDIVIDUAL_SCENARIOS = [
@@ -663,7 +631,6 @@ async def test_check_missed_tasks_individual_scenarios(
 
         with (
             patch("magic512bot.cogs.nomination.get_last_run_date", return_value=None),
-            patch("magic512bot.cogs.nomination.set_last_run_date") as mock_set_date,
         ):
             await cog.check_missed_tasks()
 
@@ -677,15 +644,75 @@ async def test_check_missed_tasks_individual_scenarios(
             else:
                 cog.create_poll.assert_not_called()
 
-            # Log and verify the date
-            if mock_set_date.call_args:
-                actual_date = mock_set_date.call_args[0][2]
-                logger.debug(
-                    f"Actual date in call: {actual_date} (type: {type(actual_date)})"
-                )
 
-                mock_set_date.assert_called_once_with(
-                    mock_session,
-                    expected_task_name,
-                    date(actual_date.year, actual_date.month, actual_date.day),
-                )
+@pytest.mark.asyncio
+async def test_send_nominations_open_message_sets_last_run_date(
+    nomination_cog: Nomination,
+) -> None:
+    """Test that send_nominations_open_message sets the last run date."""
+    cog = nomination_cog
+    mock_channel = AsyncMock(spec=discord.TextChannel)
+    mock_channel.send = AsyncMock()
+    cog.bot = MagicMock()
+    cog.bot.get_channel = MagicMock(return_value=mock_channel)
+
+    with (
+        patch("magic512bot.cogs.nomination.set_last_run_date") as mock_set_date,
+    ):
+        await cog.send_nominations_open_message()
+
+        mock_channel.send.assert_called_once()
+        mock_set_date.assert_called_once_with(
+            cog.bot.db.begin().__enter__(),
+            "thursday_nominations",
+            datetime.now().date(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_poll_sets_last_run_date(
+    nomination_cog: Nomination,
+) -> None:
+    """Test that create_poll sets the last run date."""
+    cog = nomination_cog
+    mock_channel = AsyncMock(spec=discord.TextChannel)
+    mock_channel.send = AsyncMock()
+    cog.bot = MagicMock()
+    cog.bot.get_channel = MagicMock(return_value=mock_channel)
+
+    with (
+        patch(
+            "magic512bot.cogs.nomination.get_all_nominations",
+            return_value=[MagicMock(format="Modern")],
+        ),
+        patch("magic512bot.cogs.nomination.set_last_run_date") as mock_set_date,
+    ):
+        await cog.create_poll()
+
+        mock_channel.send.assert_called_once()
+        mock_set_date.assert_called_once_with(
+            cog.bot.db.begin().__enter__(),
+            "sunday_poll",
+            datetime.now().date(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_poll_no_nominations_does_not_set_last_run_date(
+    nomination_cog: Nomination,
+) -> None:
+    """Test that create_poll does not set last run date when there are no nominations."""
+    cog = nomination_cog
+    mock_channel = AsyncMock(spec=discord.TextChannel)
+    mock_channel.send = AsyncMock()
+    cog.bot = MagicMock()
+    cog.bot.get_channel = MagicMock(return_value=mock_channel)
+
+    with (
+        patch("magic512bot.cogs.nomination.get_all_nominations", return_value=[]),
+        patch("magic512bot.cogs.nomination.set_last_run_date") as mock_set_date,
+    ):
+        await cog.create_poll()
+
+        mock_channel.send.assert_called_once()
+        mock_set_date.assert_not_called()

@@ -72,18 +72,17 @@ class Nomination(commands.Cog):
         # Start the daily check
         self.daily_check.start()
 
-    async def cog_load(self) -> None:
-        """Run when the cog is loaded to check for missed tasks."""
+    @commands.Cog.listener()
+    async def on_ready(self) -> None:
+        """Handle missed tasks once the bot is fully ready."""
         try:
+            LOGGER.info("Nomination Cog: Checking for missed tasks...")
             await self.check_missed_tasks()
             LOGGER.info("Nomination Cog: Finished checking for missed tasks")
         except Exception as e:
-            LOGGER.error(f"Error in nomination cog load: {e!s}")
-            await self.bot.send_error_message(
-                "Nomination Cog: Bot failed to check missed tasks"
-            )
+            LOGGER.error(f"Error checking missed tasks: {e!s}")
 
-    def cog_unload(self) -> None:  # type: ignore
+    async def cog_unload(self) -> None:
         """Cancel the daily check when the cog is unloaded."""
         self.daily_check.cancel()
 
@@ -193,7 +192,6 @@ class Nomination(commands.Cog):
                     if not last_thursday_run or last_thursday_run < today:
                         LOGGER.info("Running missed Thursday nominations task")
                         await self.send_nominations_open_message()
-                        set_last_run_date(session, "thursday_nominations", today)
             elif (
                 current_weekday == Weekday.SUNDAY.value and current_time < morning_time
             ):
@@ -202,7 +200,6 @@ class Nomination(commands.Cog):
                 if not last_thursday_run or last_thursday_run < thursday_date:
                     LOGGER.info("Running missed Thursday nominations task")
                     await self.send_nominations_open_message()
-                    set_last_run_date(session, "thursday_nominations", thursday_date)
 
             # Check for missed poll creation (Sunday 9AM -> Tuesday 9AM)
             is_sunday_after_morning = (
@@ -218,7 +215,6 @@ class Nomination(commands.Cog):
                 if not last_sunday_run or last_sunday_run < today:
                     LOGGER.info("Running missed Sunday poll task")
                     await self.create_poll()
-                    set_last_run_date(session, "sunday_poll", today)
 
             # Handle Tuesday before 9AM
             elif is_tuesday_before_morning:
@@ -226,7 +222,6 @@ class Nomination(commands.Cog):
                 if not last_sunday_run or last_sunday_run < sunday_date:
                     LOGGER.info("Running missed Sunday poll task")
                     await self.create_poll()
-                    set_last_run_date(session, "sunday_poll", sunday_date)
 
     @tasks.loop(time=datetime.time(hour=MORNING_HOUR, minute=0))
     async def daily_check(self) -> None:
@@ -247,11 +242,6 @@ class Nomination(commands.Cog):
             elif now.weekday() == Weekday.SUNDAY.value and last_sunday_run != today:
                 await self.create_poll()
                 LOGGER.info(f"Ran Sunday task on {today}")
-
-    @daily_check.before_loop
-    async def before_daily_check(self) -> None:
-        """Wait until the bot is ready before starting the scheduler."""
-        await self.bot.wait_until_ready()
 
     async def send_nominations_open_message(self) -> None:
         """Send a message to open nominations."""
