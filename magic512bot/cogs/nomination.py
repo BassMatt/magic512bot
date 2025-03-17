@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 from enum import Enum
 
@@ -242,13 +241,11 @@ class Nomination(commands.Cog):
             # Thursday - Open nominations
             if now.weekday() == Weekday.THURSDAY.value and last_thursday_run != today:
                 await self.send_nominations_open_message()
-                set_last_run_date(session, "thursday_nominations", today)
                 LOGGER.info(f"Ran Thursday task on {today}")
 
             # Sunday - Create poll
             elif now.weekday() == Weekday.SUNDAY.value and last_sunday_run != today:
                 await self.create_poll()
-                set_last_run_date(session, "sunday_poll", today)
                 LOGGER.info(f"Ran Sunday task on {today}")
 
     @daily_check.before_loop
@@ -263,19 +260,29 @@ class Nomination(commands.Cog):
             LOGGER.error(f"Could not find channel with ID {WC_WEDNESDAY_CHANNEL_ID}")
             return
 
-        embed = discord.Embed(
-            title="🎮 Format Nominations Open! 🎮",
-            description=(
-                "Nominate formats for next week's WC Wednesday!\n\n"
-                "Use `/nominate format=format_name` to submit your nomination.\n"
-                "Nominations will close on Sunday at 9:00 AM when voting begins."
-            ),
-            color=discord.Color.blue(),
-        )
-        embed.set_footer(text="You can have up to 2 nominations.")
+        try:
+            embed = discord.Embed(
+                title="🎮 Format Nominations Open! 🎮",
+                description=(
+                    "Nominate formats for next week's WC Wednesday!\n\n"
+                    "Use `/nominate format=format_name` to submit your nomination.\n"
+                    "Nominations will close on Sunday at 9:00 AM when voting begins."
+                ),
+                color=discord.Color.blue(),
+            )
+            embed.set_footer(text="You can have up to 2 nominations.")
 
-        await channel.send(embed=embed)
-        LOGGER.info("Sent nominations open message")
+            await channel.send(embed=embed)
+            LOGGER.info("Sent nominations open message")
+
+            # Only update last run date if message was sent successfully
+            with self.bot.db.begin() as session:
+                today = datetime.datetime.now().date()
+                set_last_run_date(session, "thursday_nominations", today)
+
+        except Exception as e:
+            LOGGER.error(f"Error sending nominations open message: {e}")
+            raise
 
     async def create_poll(self) -> None:
         """Create a poll with all nominations."""
@@ -284,50 +291,54 @@ class Nomination(commands.Cog):
             LOGGER.error(f"Could not find channel with ID {WC_WEDNESDAY_CHANNEL_ID}")
             return
 
-        with self.bot.db.begin() as session:
-            unique_formats = set(
-                nom.format.title() for nom in get_all_nominations(session)
-            )
+        try:
+            with self.bot.db.begin() as session:
+                unique_formats = set(
+                    nom.format.title() for nom in get_all_nominations(session)
+                )
 
-            if not unique_formats:
-                await channel.send("No nominations were submitted this week.")
-                return
+                if not unique_formats:
+                    await channel.send("No nominations were submitted this week.")
+                    return
 
-            # Calculate the date of the next Wednesday
-            today = datetime.datetime.now().date()
-            days_until_wednesday = (2 - today.weekday()) % 7  # 2 represents Wednesday
-            next_wednesday = today + datetime.timedelta(days=days_until_wednesday)
-            formatted_date = next_wednesday.strftime("%B %d, %Y")
+                # Calculate the date of the next Wednesday
+                today = datetime.datetime.now().date()
+                days_until_wednesday = (
+                    2 - today.weekday()
+                ) % 7  # 2 represents Wednesday
+                next_wednesday = today + datetime.timedelta(days=days_until_wednesday)
+                formatted_date = next_wednesday.strftime("%B %d, %Y")
 
-            poll_title = f"WC Wednesday Format Voting for {formatted_date}"
+                poll_title = f"WC Wednesday Format Voting for {formatted_date}"
 
-            # Create the poll
-            poll = discord.Poll(
-                question=poll_title,
-                duration=datetime.timedelta(days=1),
-                multiple=True,
-            )
+                # Create the poll
+                poll = discord.Poll(
+                    question=poll_title,
+                    duration=datetime.timedelta(days=1),
+                    multiple=True,
+                )
 
-            for format_name in unique_formats:
-                poll.add_answer(text=f"**{format_name}**")
+                for format_name in unique_formats:
+                    poll.add_answer(text=f"**{format_name}**")
 
-            # Send the poll
-            poll_message = await channel.send(
-                content="# 🗳️ Format Voting 🗳️\n\nVote for next week's format!", poll=poll
-            )
+                # Send the poll
+                poll_message = await channel.send(
+                    content="# 🗳️ Format Voting 🗳️\n\nVote for next week's format!",
+                    poll=poll,
+                )
 
-            # Store the poll ID in the database
-            set_active_poll_id(session, poll_message.id)
+                # Store the poll ID and clear nominations
+                set_active_poll_id(session, poll_message.id)
+                clear_all_nominations(session)
+                LOGGER.info(f"Created poll with {len(unique_formats)} format options")
 
-            # Store the next Wednesday date for event creation
-            self.next_wednesday = next_wednesday
+                # Only update last run date after successful poll creation
+                today = datetime.datetime.now().date()
+                set_last_run_date(session, "sunday_poll", today)
 
-            # Store the format options for later reference
-            self.format_options = list(unique_formats)
-
-            # Clear nominations after creating poll
-            clear_all_nominations(session)
-            LOGGER.info(f"Created poll with {len(unique_formats)} format options")
+        except Exception as e:
+            LOGGER.error(f"Error creating poll: {e}")
+            raise
 
     @commands.Cog.listener()
     async def on_poll_end(self, poll: discord.Poll) -> None:
@@ -358,37 +369,36 @@ class Nomination(commands.Cog):
 
     async def create_event_for_format(self, format_name: str) -> None:
         """Create a Discord event for the winning format."""
-        # Get the channel's guild
         channel = self.bot.get_channel(WC_WEDNESDAY_CHANNEL_ID)
         if not channel or not isinstance(channel, discord.TextChannel):
             LOGGER.error(f"Could not find channel with ID {WC_WEDNESDAY_CHANNEL_ID}")
             return
 
-        guild = channel.guild
-
-        # Calculate event time (next Wednesday at 7:00 PM)
-        event_time = datetime.datetime.combine(
-            self.next_wednesday,
-            datetime.time(hour=19, minute=0),  # 7:00 PM
-        )
-
-        # Event end time (2 hours later)
-        event_end_time = event_time + datetime.timedelta(hours=2)
-
         try:
+            # Calculate next Wednesday
+            today = datetime.datetime.now().date()
+            days_until_wednesday = (2 - today.weekday()) % 7  # 2 represents Wednesday
+            next_wednesday = today + datetime.timedelta(days=days_until_wednesday)
+
+            # Create event time at 7:00 PM next Wednesday
+            event_time = datetime.datetime.combine(
+                next_wednesday,
+                datetime.time(hour=19, minute=0),  # 7:00 PM
+            )
+            event_end_time = event_time + datetime.timedelta(hours=2)
+
             # Create the event
-            event = await guild.create_scheduled_event(
+            event = await channel.guild.create_scheduled_event(
                 name=f"WC Wednesday: {format_name}",
                 description=(
                     f"This week's WC Wednesday we're playing **{format_name}**!\n\n"
                 ),
                 start_time=event_time,
                 end_time=event_end_time,
-                location="Pat's Games",  # Use the channel name as location
+                location="Pat's Games",
                 privacy_level=discord.PrivacyLevel.guild_only,
             )
 
-            # Announce the event creation
             await channel.send(
                 f"# 📅 Event Created! 📅\n\n"
                 f"The winning format is **{format_name}**!\n\n"
