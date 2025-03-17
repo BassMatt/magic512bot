@@ -169,7 +169,8 @@ class Nomination(commands.Cog):
         """
         now = datetime.datetime.now()
         LOGGER.info(
-            f"Checking missed tasks at {now} (weekday: {now.weekday()}, hour: {now.hour})"
+            f"Checking missed tasks at {now}\n"
+            f"    (weekday: {now.weekday()}, hour: {now.hour})"
         )
         today = now.date()
         current_time = now.time()
@@ -223,7 +224,8 @@ class Nomination(commands.Cog):
             # Handle Sunday after 9AM or Monday (any time)
             if is_sunday_after_morning or is_monday:
                 LOGGER.info(
-                    f"In Sunday after 9AM/Monday window. Last run: {last_sunday_run}, Today: {today}"
+                    f"In Sunday after 9AM/Monday window. \
+                        Last run: {last_sunday_run}, Today: {today}"
                 )
                 if not last_sunday_run or last_sunday_run < today:
                     LOGGER.info("Running missed Sunday poll task")
@@ -235,7 +237,8 @@ class Nomination(commands.Cog):
             elif is_tuesday_before_morning:
                 sunday_date = today - datetime.timedelta(days=2)
                 LOGGER.info(
-                    f"In Tuesday before 9AM window. Last run: {last_sunday_run}, Sunday date: {sunday_date}"
+                    f"In Tuesday before 9AM window. \
+                        Last run: {last_sunday_run}, Sunday date: {sunday_date}"
                 )
                 if not last_sunday_run or last_sunday_run < sunday_date:
                     LOGGER.info("Running missed Sunday poll task")
@@ -313,9 +316,12 @@ class Nomination(commands.Cog):
 
                 if not unique_formats:
                     LOGGER.info(
-                        "No nominations were submitted this week - skipping poll creation"
+                        "No nominations were submitted this week skipping poll creation"
                     )
-                    await channel.send("No nominations were submitted this week.")
+                    await channel.send(
+                        "No nominations were submitted this week. "
+                        "Skipping poll creation."
+                    )
                     return
 
                 # Calculate the date of the next Wednesday
@@ -362,28 +368,54 @@ class Nomination(commands.Cog):
     @commands.Cog.listener()
     async def on_poll_end(self, poll: discord.Poll) -> None:
         """Handle poll end event."""
+        poll_id = (
+            "No message"
+            if not hasattr(poll, "message") or not poll.message
+            else str(poll.message.id)
+        )
+        LOGGER.info(f"Poll end event received. Poll ID: {poll_id}")
+
         with self.bot.db.begin() as session:
             active_poll_id = get_active_poll_id(session)
+            LOGGER.info(f"Active poll ID from database: {active_poll_id}")
 
             # Check if this poll is from a message we're tracking
-            if (
-                not hasattr(poll, "message")
-                or not poll.message
-                or poll.message.id != active_poll_id
-            ):
+            if not hasattr(poll, "message"):
+                LOGGER.info("Poll has no message attribute, skipping")
+                return
+            if not poll.message:
+                LOGGER.info("Poll message is None, skipping")
+                return
+            if poll.message.id != active_poll_id:
+                LOGGER.info(
+                    f"Poll ID {poll.message.id} doesn't match "
+                    f"active poll ID {active_poll_id}, skipping"
+                )
                 return
 
             LOGGER.info("Format voting poll has ended. Processing results...")
             try:
                 # Find the winning format
+                LOGGER.info(f"Poll answers: {[answer.text for answer in poll.answers]}")
+                LOGGER.info(
+                    f"Victor answer: "
+                    f"{poll.victor_answer.text if poll.victor_answer else 'No victor'}"
+                )
+
                 if not poll.victor_answer:
+                    LOGGER.error("No victor answer found in poll")
                     await self.bot.send_error_message("No victor answer found in poll")
                     return
 
                 winning_format = poll.victor_answer.text
+                LOGGER.info(f"Winning format: {winning_format}")
                 await self.create_event_for_format(winning_format.strip("*"))
+            except Exception as e:
+                LOGGER.error(f"Error processing poll end: {e}", exc_info=True)
+                raise
             finally:
                 # Reset the active poll ID in the database
+                LOGGER.info("Resetting active poll ID to None")
                 set_active_poll_id(session, None)
 
     async def create_event_for_format(self, format_name: str) -> None:

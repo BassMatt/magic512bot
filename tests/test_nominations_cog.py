@@ -341,7 +341,6 @@ async def test_check_missed_tasks_poll_monday(
     """Test checking missed tasks on Monday."""
     logger.info("Starting test_check_missed_tasks_poll_monday")
     cog = nomination_cog_with_mocks["cog"]
-    mock_session = nomination_cog_with_mocks["session"]
 
     with (
         patch(
@@ -362,7 +361,6 @@ async def test_check_missed_tasks_nominations_saturday(
 ) -> None:
     """Test checking missed tasks on Saturday."""
     cog = nomination_cog_with_mocks["cog"]
-    mock_session = nomination_cog_with_mocks["session"]
 
     with (
         patch("discord.ext.tasks.Loop.start"),
@@ -498,7 +496,7 @@ async def test_check_missed_tasks(
                 )
                 current_date = datetime.now().date()
                 logger.debug(
-                    f"Current date: {current_date} (type: {type(current_date)})"
+                    f"Current frozen date: {current_date} (type: {type(current_date)})"
                 )
 
                 with (
@@ -618,7 +616,6 @@ async def test_check_missed_tasks_individual_scenarios(
     """Test specific scenarios for check_missed_tasks."""
     with freeze_time(test_time):
         cog = nomination_cog_with_mocks["cog"]
-        mock_session = nomination_cog_with_mocks["session"]
 
         logger.debug(f"Testing scenario with time: {test_time}")
         current_date = datetime.now().date()
