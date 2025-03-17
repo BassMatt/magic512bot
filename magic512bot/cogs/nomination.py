@@ -168,6 +168,9 @@ class Nomination(commands.Cog):
         - Poll Creation: Sunday 9AM -> Tuesday 9AM
         """
         now = datetime.datetime.now()
+        LOGGER.info(
+            f"Checking missed tasks at {now} (weekday: {now.weekday()}, hour: {now.hour})"
+        )
         today = now.date()
         current_time = now.time()
         morning_time = datetime.time(hour=MORNING_HOUR, minute=0)
@@ -276,6 +279,7 @@ class Nomination(commands.Cog):
 
     async def create_poll(self) -> None:
         """Create a poll with all nominations."""
+        LOGGER.info("Attempting to create poll...")
         channel = self.bot.get_channel(WC_WEDNESDAY_CHANNEL_ID)
         if not channel or not isinstance(channel, discord.TextChannel):
             LOGGER.error(f"Could not find channel with ID {WC_WEDNESDAY_CHANNEL_ID}")
@@ -283,11 +287,17 @@ class Nomination(commands.Cog):
 
         try:
             with self.bot.db.begin() as session:
-                unique_formats = set(
-                    nom.format.title() for nom in get_all_nominations(session)
+                LOGGER.info("Fetching nominations from database...")
+                nominations = get_all_nominations(session)
+                unique_formats = set(nom.format.title() for nom in nominations)
+                LOGGER.info(
+                    f"Found {len(unique_formats)} unique formats: {unique_formats}"
                 )
 
                 if not unique_formats:
+                    LOGGER.info(
+                        "No nominations were submitted this week - skipping poll creation"
+                    )
                     await channel.send("No nominations were submitted this week.")
                     return
 
@@ -326,8 +336,10 @@ class Nomination(commands.Cog):
                 today = datetime.datetime.now().date()
                 set_last_run_date(session, "sunday_poll", today)
 
+            LOGGER.info("Successfully created poll")
+
         except Exception as e:
-            LOGGER.error(f"Error creating poll: {e}")
+            LOGGER.error(f"Error creating poll: {e}", exc_info=True)
             raise
 
     @commands.Cog.listener()
