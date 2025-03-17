@@ -75,16 +75,11 @@ class Nomination(commands.Cog):
 
     async def cog_load(self) -> None:
         """Run when the cog is loaded to check for missed tasks."""
-        LOGGER.info("Nomination Cog: Waiting for the bot to be ready...")
         try:
-            await asyncio.wait_for(
-                self.bot.wait_until_ready(), timeout=60.0
-            )  # Add timeout
-            LOGGER.info("Nomination Cog: Bot is ready, checking for missed tasks...")
             await self.check_missed_tasks()
             LOGGER.info("Nomination Cog: Finished checking for missed tasks")
-        except TimeoutError:
-            LOGGER.error("Nomination Cog: Bot failed to become ready after 60 seconds")
+        except Exception as e:
+            LOGGER.error(f"Error in nomination cog load: {e!s}")
             await self.bot.send_error_message(
                 "Nomination Cog: Bot failed to check missed tasks"
             )
