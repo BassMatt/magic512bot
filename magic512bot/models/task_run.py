@@ -3,7 +3,7 @@ from datetime import date
 from sqlalchemy import BigInteger, Date, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from magic512bot.database import Base
+from .base import Base
 
 
 class TaskRun(Base):
