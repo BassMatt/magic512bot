@@ -6,12 +6,8 @@ from magic512bot.database import SessionLocal, init_db
 
 
 class Magic512Bot(commands.Bot):
-    def __init__(self) -> None:
-        intents = discord.Intents.default()
-        intents.message_content = True
-        intents.members = True
-        intents.polls = True
-        super().__init__(command_prefix="!", intents=intents)
+    def __init__(self, command_prefix: str, intents: discord.Intents) -> None:
+        super().__init__(command_prefix=command_prefix, intents=intents)
 
     # Syncs guild commands to specified guild
     async def setup_hook(self) -> None:
@@ -103,7 +99,12 @@ class Magic512Bot(commands.Bot):
 
 async def main() -> None:
     # Create bot instance
-    bot = Magic512Bot()
+    intents = discord.Intents.none()  # Start with no intents
+    intents.guilds = True  # Needed for basic guild/channel operations
+    intents.guild_messages = True  # Needed to fetch messages
+    intents.guild_scheduled_events = True  # Needed to create events
+
+    bot = Magic512Bot(command_prefix="!", intents=intents)
 
     # Start the bot with your token
     async with bot:

@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 import discord
 import pytest
 from discord import app_commands
-from discord.ext.commands import Bot
 
 from magic512bot.cogs.role_request import (
     RoleRequest,
@@ -13,6 +12,7 @@ from magic512bot.cogs.role_request import (
     _process_user_milestone_roles,
     _sync_user_sweat_roles,
 )
+from magic512bot.config import LOGGER
 
 
 @pytest.mark.asyncio
@@ -91,78 +91,56 @@ async def test_request_role(
     mock_interaction: discord.Interaction,
 ) -> None:
     """Test the request_role command."""
+    LOGGER.info("Starting request_role test")
     cog = RoleRequest(mock_bot)
 
-    # Setup the test
+    # Setup with proper types
     mock_role = MagicMock(spec=discord.Role)
     mock_role.name = "Standard Sweat"
     mock_role.id = 1333297150192259112
     mock_role.mention = "<@&1333297150192259112>"
+    LOGGER.debug(f"Created mock role: {mock_role.name} ({mock_role.id})")
 
-    # Create a proper Member mock
     mock_user = MagicMock(spec=discord.Member)
     mock_user.id = 12345
     type(mock_user).roles = PropertyMock(return_value=[])
     mock_user.mention = "<@12345>"
-    mock_interaction.user = mock_user
+    mock_interaction.user = cast(discord.Member, mock_user)
+    LOGGER.debug(f"Created mock user: {mock_user.mention}")
 
-    # Mock the channel as a TextChannel
     mock_channel = AsyncMock(spec=discord.TextChannel)
     mock_channel.send = AsyncMock()
+    LOGGER.debug("Created mock channel")
 
-    # Set up the guild mock
-    guild_mock = cast(discord.Guild, mock_interaction.guild)
+    guild_mock: Any = mock_interaction.guild
     with patch.object(
-        type(guild_mock), "roles", new_callable=PropertyMock
-    ) as mock_roles:
-        mock_roles.return_value = [mock_role]
-        with patch.object(guild_mock, "get_channel") as mock_get_channel:
-            mock_get_channel.return_value = mock_channel
+        type(guild_mock),
+        "roles",
+        new_callable=PropertyMock,
+        return_value=[mock_role],
+    ):
+        LOGGER.debug("Patched guild roles")
+        guild_mock.get_channel = MagicMock(
+            return_value=cast(discord.TextChannel, mock_channel)
+        )
+        LOGGER.info("Calling request_role command")
+        # Get the unbound method and call it with self
+        callback: Callable[[RoleRequest, discord.Interaction, str, str], Any] = (
+            cog.request_role.callback
+        )
 
-            # Patch ROLE_REQUEST_CHANNEL_ID
-            with patch("magic512bot.cogs.role_request.ROLE_REQUEST_CHANNEL_ID", 12345):
-                # Patch ALLOWED_ROLE_REQUESTS to include our test role
-                with patch(
-                    "magic512bot.cogs.role_request.ALLOWED_ROLE_REQUESTS",
-                    {"Standard Sweat": mock_role.id},
-                ):
-                    # Mock discord.utils.get to return our mock role
-                    with patch("discord.utils.get", return_value=mock_role):
-                        # Mock RoleRequestView
-                        with patch(
-                            "magic512bot.cogs.role_request.RoleRequestView"
-                        ) as mock_view_class:
-                            mock_view = MagicMock()
-                            mock_view_class.return_value = mock_view
+        # Call with self (cog) as first argument
+        await callback(
+            cog,  # Pass self (the cog instance)
+            mock_interaction,  # Pass interaction
+            "Standard Sweat",  # Pass role name
+            "I want to participate in Standard events",  # Pass reason
+        )
 
-                            # Mock Embed
-                            with patch("discord.Embed") as mock_embed_class:
-                                mock_embed = MagicMock()
-                                mock_embed_class.return_value = mock_embed
-
-                                # Cast the command to the correct type and get its callback
-                                request_role_command = cast(
-                                    app_commands.Command, cog.request_role
-                                )
-                                callback = cast(
-                                    Callable[[Any, discord.Interaction, str, str], Any],
-                                    request_role_command.callback,
-                                )
-                                await callback(
-                                    cog,
-                                    mock_interaction,
-                                    "Standard Sweat",
-                                    "I earned it",
-                                )
-
-                                # Verify the expected actions were taken
-                                mock_channel_send = cast(AsyncMock, mock_channel.send)
-                                mock_send = cast(
-                                    AsyncMock, mock_interaction.response.send_message
-                                )
-
-                                assert mock_channel_send.await_count == 1
-                                assert mock_send.await_count == 1
+        # Verify interactions
+        mock_interaction.response.send_message.assert_called_once()
+        mock_channel.send.assert_awaited_once()
+        LOGGER.info("Test completed successfully")
 
 
 @pytest.mark.asyncio
@@ -337,11 +315,6 @@ def test_sync_user_sweat_roles(
     db_session: Any,
 ) -> None:
     """Test the _sync_user_sweat_roles function."""
-    import logging
-
-    logging.basicConfig(level=logging.DEBUG)
-    logger = logging.getLogger(__name__)
-
     # Create a mock sessionmaker that returns our test session
     mock_sessionmaker = MagicMock()
     mock_sessionmaker.begin.return_value.__enter__.return_value = db_session
@@ -359,7 +332,7 @@ def test_sync_user_sweat_roles(
     role2.name = "Modern Sweat"
     mock_roles = cast(list[discord.Role], [role1, role2])
     mock_member.roles = mock_roles
-    logger.debug(f"Created mock roles: {[r.name for r in mock_roles]}")
+    LOGGER.debug(f"Created mock roles: {[r.name for r in mock_roles]}")
 
     # Mock get_user_sweat_roles to return an empty list
     with patch("magic512bot.cogs.role_request.get_user_sweat_roles", return_value=[]):
@@ -368,10 +341,10 @@ def test_sync_user_sweat_roles(
             "magic512bot.cogs.role_request.SWEAT_ROLES",
             {"Standard Sweat": 123, "Modern Sweat": 456},
         ):
-            logger.debug("About to call _sync_user_sweat_roles")
+            LOGGER.debug("About to call _sync_user_sweat_roles")
             # Call _sync_user_sweat_roles
             result = _sync_user_sweat_roles(mock_member, mock_sessionmaker)
-            logger.debug(f"Got result: {result}")
+            LOGGER.debug(f"Got result: {result}")
 
             # Verify the result
             assert "Standard Sweat" in result

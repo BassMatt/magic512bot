@@ -1,5 +1,3 @@
-from enum import StrEnum
-
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -7,7 +5,7 @@ from discord.ext import commands
 # from services.role_request import add_user_role, remove_user_role
 from sqlalchemy.orm import Session, sessionmaker
 
-from magic512bot.config import LOGGER, ROLE_REQUEST_CHANNEL_ID
+from magic512bot.config import LOGGER
 from magic512bot.main import Magic512Bot
 from magic512bot.services.role_request import (
     add_user_sweat_role,
@@ -16,64 +14,16 @@ from magic512bot.services.role_request import (
     remove_user_sweat_roles,
 )
 
-COMPETITIVE_ROLES = {
-    "RC Qualified": 1323031728238891100,
-    "Pro Tour": 1338683101571977226,
-}
-
-SWEAT_ROLES = {
-    "Standard Sweat": 1333297150192259112,
-    "Pioneer Sweat": 1316976975138787459,
-    "Modern Sweat": 1333297420456431646,
-    "Legacy Sweat": 1333297655857807361,
-    "Vintage Sweat": 1333297998595358804,
-    "Pauper Sweat": 1333302285404471409,
-    "Cube Sweat": 1333300770891759637,
-    "Limited Sweat": 1333300276781645836,
-    "Value Sweat": 1349569141698203649,
-}
-
-MILESTONE_ROLES = {
-    "OmniSweat": 1333322766362873927,
-    "Sweat Lord": 1333301233670160435,
-    "Sweat Knight": 1333322555465142353,
-}
-
-ALLOWED_ROLE_REQUESTS = COMPETITIVE_ROLES | SWEAT_ROLES
-
-# Constants for role thresholds
-OMNI_SWEAT_THRESHOLD = 8
-SWEAT_LORD_THRESHOLD = 5
-SWEAT_KNIGHT_THRESHOLD = 3
-
-
-class Roles(StrEnum):
-    MOD = "Mod"
-
-    # Team Roles
-    TEAM = "Team"
-    COUNCIL = "Council"
-    HONORARY_TEAM_MEMBER = "Honorary Team Member"
-    THE_MONARCH = "The Monarch"
-
-    # Sweat Roles
-    STANDARD_SWEAT = "Standard Sweat"
-    PIONEER_SWEAT = "Pioneer Sweat"
-    MODERN_SWEAT = "Modern Sweat"
-    LEGACY_SWEAT = "Legacy Sweat"
-    VINTAGE_SWEAT = "Vintage Sweat"
-    PAUPER_SWEAT = "Pauper Sweat"
-    CUBE_SWEAT = "Cube Sweat"
-    LIMITED_SWEAT = "Limited Sweat"
-    VALUE_SWEAT = "Value Sweat"
-
-    SWEAT_KNIGHT = "Sweat Knight"  # 3 sweats
-    SWEAT_LORD = "Sweat Lord"  # 5 sweats
-    OMNI_SWEAT = "OmniSweat"  # 8 sweats
-
-    # Competitive Roles
-    RC_QUALIFIED = "RC Qualified"
-    PRO_TOUR = "Pro Tour"
+from .constants import (
+    ALLOWED_ROLE_REQUESTS,
+    MILESTONE_ROLES,
+    OMNI_SWEAT_THRESHOLD,
+    SWEAT_KNIGHT_THRESHOLD,
+    SWEAT_LORD_THRESHOLD,
+    SWEAT_ROLES,
+    Channels,
+    Roles,
+)
 
 
 class RoleRequestView(discord.ui.View):
@@ -222,8 +172,10 @@ class RoleRequest(commands.Cog):
         user = interaction.user
         if role not in user.roles:
             await interaction.response.send_message(
-                "You do not have the Monarch", ephemeral=True
+                "You do not have the Monarch role to be able to assign it",
+                ephemeral=True,
             )
+            return
 
         await user.remove_roles(
             role,
@@ -236,8 +188,21 @@ class RoleRequest(commands.Cog):
 
         await interaction.response.send_message(
             f"Successfully transferred {role.mention} role from you to {to.mention}",
-            ephemeral=False,
+            ephemeral=True,
         )
+
+        if channel := interaction.guild.get_channel(Channels.TEAM_GENERAL_CHANNEL_ID):
+            if not isinstance(channel, discord.TextChannel):
+                LOGGER.error(
+                    f"Could not find text channel with ID "
+                    f"{Channels.TEAM_GENERAL_CHANNEL_ID}"
+                )
+                return
+            await channel.send(
+                f"Successfully transferred {role.mention} role from "
+                f"{user.mention} to {to.mention}"
+            )
+        return
 
     async def role_autocomplete(
         self,
@@ -312,7 +277,7 @@ class RoleRequest(commands.Cog):
 
         # Get moderator channel
 
-        role_request_channel = guild.get_channel(ROLE_REQUEST_CHANNEL_ID)
+        role_request_channel = guild.get_channel(Channels.ROLE_REQUEST_CHANNEL_ID)
         if not role_request_channel or not isinstance(
             role_request_channel, discord.TextChannel
         ):

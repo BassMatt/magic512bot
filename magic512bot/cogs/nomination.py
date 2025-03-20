@@ -1,11 +1,10 @@
 import datetime
-from enum import Enum
 
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from magic512bot.config import LOGGER, WC_WEDNESDAY_CHANNEL_ID
+from magic512bot.config import LOGGER
 from magic512bot.main import Magic512Bot
 from magic512bot.services.nomination import (
     MAX_NOMINATION_LENGTH,
@@ -21,16 +20,7 @@ from magic512bot.services.task_run import (
     set_last_run_date,
 )
 
-
-class Weekday(Enum):
-    MONDAY = 0
-    TUESDAY = 1
-    WEDNESDAY = 2
-    THURSDAY = 3
-    FRIDAY = 4
-    SATURDAY = 5
-    SUNDAY = 6
-
+from .constants import Channels, Weekday
 
 MORNING_HOUR = 9
 MAX_USER_NOMINATIONS = 2
@@ -137,7 +127,7 @@ class Nomination(commands.Cog):
                 )
 
                 # Also send a message to the wc-wednesday channel
-                channel = self.bot.get_channel(WC_WEDNESDAY_CHANNEL_ID)
+                channel = self.bot.get_channel(Channels.WC_WEDNESDAY_CHANNEL_ID)
                 if channel and isinstance(channel, discord.TextChannel):
                     await channel.send(
                         f"🎲 **{interaction.user.display_name}** has nominated "
@@ -145,7 +135,8 @@ class Nomination(commands.Cog):
                     )
                 else:
                     LOGGER.error(
-                        f"Could not find channel with ID {WC_WEDNESDAY_CHANNEL_ID}"
+                        f"Could not find text channel with ID "
+                        f"{Channels.WC_WEDNESDAY_CHANNEL_ID}"
                     )
             except ValueError as e:
                 await interaction.response.send_message(
@@ -268,9 +259,11 @@ class Nomination(commands.Cog):
 
     async def send_nominations_open_message(self) -> None:
         """Send a message to open nominations."""
-        channel = self.bot.get_channel(WC_WEDNESDAY_CHANNEL_ID)
+        channel = self.bot.get_channel(Channels.WC_WEDNESDAY_CHANNEL_ID)
         if not channel or not isinstance(channel, discord.TextChannel):
-            LOGGER.error(f"Could not find channel with ID {WC_WEDNESDAY_CHANNEL_ID}")
+            LOGGER.error(
+                f"Could not find channel with ID {Channels.WC_WEDNESDAY_CHANNEL_ID}"
+            )
             return
 
         try:
@@ -300,9 +293,11 @@ class Nomination(commands.Cog):
     async def create_poll(self) -> None:
         """Create a poll with all nominations."""
         LOGGER.info("Attempting to create poll...")
-        channel = self.bot.get_channel(WC_WEDNESDAY_CHANNEL_ID)
+        channel = self.bot.get_channel(Channels.WC_WEDNESDAY_CHANNEL_ID)
         if not channel or not isinstance(channel, discord.TextChannel):
-            LOGGER.error(f"Could not find channel with ID {WC_WEDNESDAY_CHANNEL_ID}")
+            LOGGER.error(
+                f"Could not find channel with ID {Channels.WC_WEDNESDAY_CHANNEL_ID}"
+            )
             return
 
         try:
@@ -366,6 +361,31 @@ class Nomination(commands.Cog):
             raise
 
     @commands.Cog.listener()
+    async def on_message_update(
+        self, before: discord.Message, after: discord.Message
+    ) -> None:
+        """Handle poll updates and detect when they end."""
+        LOGGER.info(f"Message update detected. Message ID: {after.id}")
+
+        try:
+            # Check if this is a poll message
+            if not hasattr(after, "poll"):
+                return
+            if not after.poll:
+                LOGGER.info("Message is not a poll, skipping")
+                return
+
+            poll = after.poll
+            if not poll.is_finalised():
+                LOGGER.info("Poll is not finalised, skipping")
+                return
+
+            LOGGER.info(f"Poll ended detected. Poll ID: {after.id}")
+            # Process using existing poll end logic
+            await self.on_poll_end(poll)
+        except Exception as e:
+            LOGGER.error(f"Error processing poll update: {e}", exc_info=True)
+
     async def on_poll_end(self, poll: discord.Poll) -> None:
         """Handle poll end event."""
         poll_id = (
@@ -373,8 +393,7 @@ class Nomination(commands.Cog):
             if not hasattr(poll, "message") or not poll.message
             else str(poll.message.id)
         )
-        LOGGER.info(f"Poll end event received. Poll ID: {poll_id}")
-
+        LOGGER.info(f"Processing poll end. Poll ID: {poll_id}")
         with self.bot.db.begin() as session:
             active_poll_id = get_active_poll_id(session)
             LOGGER.info(f"Active poll ID from database: {active_poll_id}")
@@ -420,9 +439,11 @@ class Nomination(commands.Cog):
 
     async def create_event_for_format(self, format_name: str) -> None:
         """Create a Discord event for the winning format."""
-        channel = self.bot.get_channel(WC_WEDNESDAY_CHANNEL_ID)
+        channel = self.bot.get_channel(Channels.WC_WEDNESDAY_CHANNEL_ID)
         if not channel or not isinstance(channel, discord.TextChannel):
-            LOGGER.error(f"Could not find channel with ID {WC_WEDNESDAY_CHANNEL_ID}")
+            LOGGER.error(
+                f"Could not find channel with ID {Channels.WC_WEDNESDAY_CHANNEL_ID}"
+            )
             return
 
         try:
