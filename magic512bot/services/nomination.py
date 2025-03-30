@@ -24,15 +24,12 @@ def add_nomination(session: Session, user_id: int, format: str) -> None:
         raise ValueError("Format is too long. Please keep it under 55 characters.")
 
     try:
-        # Check if the user already has a nomination
-        stmt = select(Nomination).where(Nomination.user_id == user_id)
+        # Check if the format is already nominated
+        stmt = select(Nomination).where(Nomination.format == format)
         result = session.execute(stmt)
         existing = result.scalars().first()
 
-        if existing:
-            # Update existing nomination
-            existing.format = format
-        else:
+        if not existing:
             # Create new nomination
             nomination = Nomination(user_id=user_id, format=format)
             session.add(nomination)

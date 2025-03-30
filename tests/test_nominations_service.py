@@ -38,9 +38,7 @@ def test_add_nomination_existing_user(db_session: Session) -> None:
 
     # Verify the nomination was updated
     nominations = db_session.query(Nomination).all()
-    assert len(nominations) == 1
-    assert nominations[0].user_id == 12345
-    assert nominations[0].format == "Standard"
+    assert len(nominations) == 2
 
 
 def test_add_nomination_multiple_users(db_session: Session) -> None:

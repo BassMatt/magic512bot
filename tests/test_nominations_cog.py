@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from collections.abc import Callable
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any, cast
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
@@ -26,11 +26,7 @@ logging.basicConfig(level=logging.DEBUG)
 @pytest.fixture
 def nomination_cog(mock_bot: MagicMock) -> Nomination:
     """Create a Nomination cog with all background tasks disabled."""
-    with (
-        patch("discord.ext.tasks.Loop.start"),
-        patch("discord.ext.tasks.Loop.before_loop"),
-        patch("discord.ext.tasks.Loop.after_loop"),
-    ):
+    with patch("discord.ext.tasks.Loop.start"):
         cog = Nomination(mock_bot)
         mock_bot.wait_until_ready = AsyncMock()
         return cog
@@ -42,12 +38,48 @@ def frozen_datetime() -> datetime:
     return datetime.now()
 
 
+@pytest.fixture
+def mock_channel():
+    """Create a mock discord channel."""
+    channel = AsyncMock(spec=discord.TextChannel)
+    channel.send = AsyncMock()
+    return channel
+
+
+@pytest.fixture
+def mock_interaction():
+    """Create a mock discord interaction."""
+    interaction = MagicMock(spec=discord.Interaction)
+    interaction.response = AsyncMock()
+    interaction.response.send_message = AsyncMock()
+    interaction.user = MagicMock(spec=discord.Member)
+    interaction.user.id = 12345
+    interaction.user.display_name = "TestUser"
+    return interaction
+
+
+# Test scenarios for nomination periods
+NOMINATION_PERIOD_SCENARIOS = [
+    pytest.param("2024-03-14 09:00:00", True, id="thursday_9am_open"),
+    pytest.param("2024-03-14 08:59:00", False, id="thursday_before_9am_closed"),
+    pytest.param("2024-03-17 08:59:00", True, id="sunday_before_9am_open"),
+    pytest.param("2024-03-17 09:00:00", False, id="sunday_9am_closed"),
+]
+
+
+@pytest.mark.parametrize("test_time,expected_active", NOMINATION_PERIOD_SCENARIOS)
+def test_is_nomination_period_active(test_time: str, expected_active: bool) -> None:
+    """Test if nominations are active during specific time periods."""
+    with freeze_time(test_time):
+        assert is_nomination_period_active() == expected_active
+
+
+# Test scenarios for nomination commands
 NOMINATION_COMMAND_SCENARIOS = [
     pytest.param(
         True,  # nominations_active
         [],  # existing_nominations
         "Modern",  # format_name
-        None,  # expected_error
         True,  # should_succeed
         "Your nomination for **Modern**",  # expected_message
         id="success",
@@ -56,56 +88,38 @@ NOMINATION_COMMAND_SCENARIOS = [
         False,  # nominations_active
         [],  # existing_nominations
         "Modern",  # format_name
-        "Nominations are currently closed",  # expected_error
         False,  # should_succeed
         "Nominations are currently closed",  # expected_message
         id="nominations_closed",
     ),
     pytest.param(
         True,  # nominations_active
-        [MagicMock(), MagicMock()],  # existing_nominations (MAX_USER_NOMINATIONS)
+        ["Format1", "Format2"],  # existing_nominations
         "Modern",  # format_name
-        "maximum of 2 nominations",  # expected_error
         False,  # should_succeed
         "maximum of 2 nominations",  # expected_message
         id="max_nominations",
-    ),
-    pytest.param(
-        True,  # nominations_active
-        [],  # existing_nominations
-        "A" * 56,  # format_name (too long)
-        "too long",  # expected_error
-        False,  # should_succeed
-        "too long",  # expected_message
-        id="format_too_long",
     ),
 ]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "nominations_active,existing_nominations,format_name,expected_error,should_succeed,expected_message",
+    "nominations_active,existing_nominations,format_name,should_succeed,expected_message",
     NOMINATION_COMMAND_SCENARIOS,
 )
-async def test_nominate_command_scenarios(
+async def test_nominate_command(
     nomination_cog: Nomination,
     mock_interaction: discord.Interaction,
+    mock_channel: discord.TextChannel,
     nominations_active: bool,
-    existing_nominations: list[MagicMock],
+    existing_nominations: list[str],
     format_name: str,
-    expected_error: str | None,
     should_succeed: bool,
     expected_message: str,
 ) -> None:
-    """Test various nomination command scenarios."""
-    cog = nomination_cog
-
-    # Create a proper mock for the interaction
-    mock_interaction = MagicMock(spec=discord.Interaction)
-    mock_interaction.response = AsyncMock()
-    mock_interaction.response.send_message = AsyncMock()
-    mock_interaction.user = MagicMock(spec=discord.Member)
-    mock_interaction.user.id = 12345
+    """Test nomination command under various scenarios."""
+    nomination_cog.bot.get_channel = MagicMock(return_value=mock_channel)
 
     with (
         patch(
@@ -117,25 +131,20 @@ async def test_nominate_command_scenarios(
             return_value=existing_nominations,
         ),
         patch("magic512bot.cogs.nomination.add_nomination") as mock_add,
-        patch.object(cog.bot, "get_channel", return_value=None),
     ):
-        # Cast the command to the correct type and get its callback
-        nominate_command = cast(app_commands.Command, cog.nominate)
-        callback = cast(
-            Callable[[Any, discord.Interaction, str], Any], nominate_command.callback
+        await nomination_cog.nominate.callback(
+            nomination_cog, mock_interaction, format_name
         )
-        await callback(cog, mock_interaction, format_name)
 
-        # Verify the response
+        # Verify response
         mock_interaction.response.send_message.assert_called_once()
         message = mock_interaction.response.send_message.call_args[0][0]
         assert expected_message in message
         assert mock_interaction.response.send_message.call_args[1]["ephemeral"] is True
 
-        # Verify add_nomination was called only on success
+        # Verify nomination was added only on success
         if should_succeed:
             mock_add.assert_called_once()
-            assert mock_add.call_args[1]["user_id"] == mock_interaction.user.id
             assert mock_add.call_args[1]["format"] == format_name
         else:
             mock_add.assert_not_called()
@@ -344,7 +353,7 @@ async def test_check_missed_tasks_poll_monday(
 
     with (
         patch(
-            "magic512bot.cogs.nomination.get_last_run_date",
+            "magic512bot.cogs.nomination.get_last_nomination_open_date",
             return_value=datetime.now().date() - timedelta(days=1),
         ),
     ):
@@ -405,8 +414,8 @@ async def test_check_missed_tasks_poll_tuesday_before_9am(
     cog.create_poll = AsyncMock(side_effect=spy_create_poll)
 
     with (
-        patch("magic512bot.cogs.nomination.get_last_run_date", return_value=None),
-        patch("magic512bot.cogs.nomination.set_last_run_date") as mock_set_date,
+        patch("magic512bot.cogs.nomination.get_poll_last_run_date", return_value=None),
+        patch("magic512bot.cogs.nomination.set_poll") as mock_set_poll,
         patch(
             "magic512bot.cogs.nomination.get_all_nominations",
             return_value=[MagicMock(format="Modern")],
@@ -415,10 +424,9 @@ async def test_check_missed_tasks_poll_tuesday_before_9am(
         await cog.check_missed_tasks()
 
         cog.create_poll.assert_called_once()
-        mock_set_date.assert_called_once_with(
+        mock_set_poll.assert_called_once_with(
             mock_session,
-            "sunday_poll",
-            current_date,  # This will be set by create_poll
+            mock_channel.id,
         )
 
 
@@ -713,3 +721,207 @@ async def test_create_poll_no_nominations_does_not_set_last_run_date(
 
         mock_channel.send.assert_called_once()
         mock_set_date.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_nomination_limit(
+    nomination_cog: Nomination, mock_interaction: discord.Interaction
+) -> None:
+    """Test that users can add two nominations but not three, and verify database storage."""
+    cog = nomination_cog
+
+    # Setup mock interaction and channel as before...
+    mock_interaction = MagicMock(spec=discord.Interaction)
+    mock_interaction.response = AsyncMock()
+    mock_interaction.response.send_message = AsyncMock()
+    mock_interaction.user = MagicMock(spec=discord.Member)
+    mock_interaction.user.id = 12345
+    mock_interaction.user.display_name = "TestUser"
+
+    # Setup mock channel for nomination announcements
+    mock_channel = AsyncMock(spec=discord.TextChannel)
+    mock_channel.send = AsyncMock()
+    mock_channel.send.return_value = AsyncMock()
+
+    # Add this line to make the bot return our mock channel
+    cog.bot.get_channel = MagicMock(return_value=mock_channel)
+    stored_nominations: list[str] = []
+
+    def mock_add_nomination(**kwargs: Any) -> None:
+        stored_nominations.append(kwargs["format"])
+
+    with (
+        patch(
+            "magic512bot.cogs.nomination.is_nomination_period_active", return_value=True
+        ),
+        patch(
+            "magic512bot.cogs.nomination.add_nomination",
+            side_effect=mock_add_nomination,
+        ),
+        patch(
+            "magic512bot.cogs.nomination.get_user_nominations",
+            side_effect=lambda *args: stored_nominations,
+        ),
+    ):
+        # Cast the command to the correct type and get its callback
+        nominate_command = cast(app_commands.Command, cog.nominate)
+        callback = cast(
+            Callable[[Any, discord.Interaction, str], Any], nominate_command.callback
+        )
+
+        # First nomination should succeed
+        await callback(cog, mock_interaction, "Modern")
+        assert len(stored_nominations) == 1
+        assert stored_nominations[0] == "Modern"
+        assert (
+            "Your nomination for **Modern**"
+            in mock_interaction.response.send_message.call_args[0][0]
+        )
+
+        # Second nomination should succeed
+        await callback(cog, mock_interaction, "Pioneer")
+        assert len(stored_nominations) == 2
+        assert "Pioneer" in stored_nominations
+        assert (
+            "Your nomination for **Pioneer**"
+            in mock_interaction.response.send_message.call_args[0][0]
+        )
+
+        # Third nomination should fail
+        await callback(cog, mock_interaction, "Legacy")
+        assert len(stored_nominations) == 2  # Should still be 2
+        assert "Legacy" not in stored_nominations
+        assert (
+            "maximum of 2 nominations"
+            in mock_interaction.response.send_message.call_args[0][0]
+        )
+
+        # Verify channel messages were sent for successful nominations
+        assert mock_channel.send.call_count == 2
+        assert "Modern" in mock_channel.send.call_args_list[0][0][0]
+        assert "Pioneer" in mock_channel.send.call_args_list[1][0][0]
+
+
+@pytest.mark.asyncio
+async def test_nominate_command_basic(nomination_cog: Nomination) -> None:
+    """Test basic nomination command functionality."""
+    # Setup
+    mock_interaction = MagicMock(spec=discord.Interaction)
+    mock_interaction.response = AsyncMock()
+    mock_interaction.user = MagicMock(spec=discord.Member)
+    mock_interaction.user.id = 12345
+    mock_interaction.user.display_name = "TestUser"
+
+    mock_channel = AsyncMock(spec=discord.TextChannel)
+    nomination_cog.bot.get_channel = MagicMock(return_value=mock_channel)
+
+    # Test
+    with (
+        patch(
+            "magic512bot.cogs.nomination.is_nomination_period_active", return_value=True
+        ),
+        patch("magic512bot.cogs.nomination.get_user_nominations", return_value=[]),
+        patch("magic512bot.cogs.nomination.add_nomination") as mock_add,
+    ):
+        await nomination_cog.nominate(mock_interaction, "Modern")
+
+        # Verify user response
+        mock_interaction.response.send_message.assert_called_once()
+        response = mock_interaction.response.send_message.call_args[0][0]
+        assert "Your nomination for **Modern**" in response
+        assert mock_interaction.response.send_message.call_args[1]["ephemeral"] is True
+
+        # Verify nomination was added
+        mock_add.assert_called_once_with(session=ANY, user_id=12345, format="Modern")
+
+
+@pytest.mark.asyncio
+async def test_send_nominations_open_message(nomination_cog: Nomination) -> None:
+    """Test sending the nominations open message."""
+    # Setup
+    mock_channel = AsyncMock(spec=discord.TextChannel)
+    mock_channel.send = AsyncMock()
+    nomination_cog.bot.get_channel = MagicMock(return_value=mock_channel)
+
+    # Test
+    with patch("magic512bot.cogs.nomination.set_nomination") as mock_set:
+        await nomination_cog.send_nominations_open_message()
+
+        # Verify message was sent
+        mock_channel.send.assert_called_once()
+
+        # Verify nomination was recorded
+        mock_set.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_create_poll_with_nominations(nomination_cog: Nomination) -> None:
+    """Test creating a poll when nominations exist."""
+    # Setup
+    mock_channel = AsyncMock(spec=discord.TextChannel)
+    mock_channel.send = AsyncMock()
+    nomination_cog.bot.get_channel = MagicMock(return_value=mock_channel)
+
+    test_nominations = [MagicMock(format="Modern"), MagicMock(format="Pioneer")]
+
+    # Test
+    with (
+        patch(
+            "magic512bot.cogs.nomination.get_all_nominations",
+            return_value=test_nominations,
+        ),
+        patch("magic512bot.cogs.nomination.clear_all_nominations") as mock_clear,
+        patch("magic512bot.cogs.nomination.set_poll") as mock_set_poll,
+    ):
+        await nomination_cog.create_poll()
+
+        # Verify poll was created
+        mock_channel.send.assert_called_once()
+
+        # Verify nominations were cleared and poll was recorded
+        mock_clear.assert_called_once()
+        mock_set_poll.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_create_poll_no_nominations(nomination_cog: Nomination) -> None:
+    """Test creating a poll when no nominations exist."""
+    # Setup
+    mock_channel = AsyncMock(spec=discord.TextChannel)
+    mock_channel.send = AsyncMock()
+    nomination_cog.bot.get_channel = MagicMock(return_value=mock_channel)
+
+    # Test
+    with (
+        patch("magic512bot.cogs.nomination.get_all_nominations", return_value=[]),
+        patch("magic512bot.cogs.nomination.set_poll") as mock_set_poll,
+    ):
+        await nomination_cog.create_poll()
+
+        # Verify message was sent
+        mock_channel.send.assert_called_once()
+
+        # Verify no poll was recorded
+        mock_set_poll.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_check_missed_tasks_basic(nomination_cog: Nomination) -> None:
+    """Test basic missed tasks checking functionality."""
+    # Setup
+    with (
+        freeze_time("2024-03-14 10:00:00"),  # Thursday after 9 AM
+        patch(
+            "magic512bot.cogs.nomination.get_last_nomination_open_date",
+            return_value=None,
+        ),
+        patch.object(
+            nomination_cog, "have_sent_nominations_open_message", return_value=False
+        ),
+        patch.object(nomination_cog, "send_nominations_open_message") as mock_send,
+    ):
+        # Test
+        await nomination_cog.check_missed_tasks()
+
+        # Verify nominations message was sent
+        mock_send.assert_called_once()

@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 from typing import Final
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
@@ -10,6 +11,7 @@ load_dotenv()
 TEST_GUILD_ID = 1074039539280121936
 DB_CONNECTION_STRING = os.getenv("DB_CONNECTION_STRING") or ""
 BOT_TOKEN = os.getenv("BOT_TOKEN") or ""
+TIMEZONE = ZoneInfo("America/Chicago")  # This handles CDT/CST automatically
 
 
 def setup_logger() -> logging.Logger:
