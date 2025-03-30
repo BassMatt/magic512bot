@@ -84,6 +84,7 @@ def clear_all_nominations(session: Session) -> int:
     try:
         stmt = delete(Nomination)
         result = session.execute(stmt)
+        LOGGER.info(f"Cleared {result.rowcount} nominations")
         return result.rowcount
     except Exception as e:
         LOGGER.error(f"Error clearing nominations: {e!s}")

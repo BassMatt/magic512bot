@@ -14,15 +14,23 @@ BOT_TOKEN = os.getenv("BOT_TOKEN") or ""
 TIMEZONE = ZoneInfo("America/Chicago")  # This handles CDT/CST automatically
 
 
+def is_running_tests() -> bool:
+    """Check if code is being run by pytest."""
+    return "pytest" in sys.modules
+
+
 def setup_logger() -> logging.Logger:
     logger = logging.getLogger("magic512bot")
-    logger.setLevel(logging.INFO)  # Set this to the desired level
+    # Set DEBUG level for tests, INFO for normal running
+    logger.setLevel(logging.DEBUG if is_running_tests() else logging.INFO)
 
     # Create handlers
     c_handler = logging.StreamHandler(sys.stdout)
     f_handler = logging.FileHandler("bot.log")
-    c_handler.setLevel(logging.INFO)  # Console handler level
-    f_handler.setLevel(logging.DEBUG)  # File handler level
+
+    # Console shows DEBUG for tests, INFO for normal running
+    c_handler.setLevel(logging.DEBUG if is_running_tests() else logging.INFO)
+    f_handler.setLevel(logging.DEBUG)  # File always logs DEBUG
 
     # Create formatters and add it to handlers
     format = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")

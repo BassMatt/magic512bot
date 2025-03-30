@@ -21,7 +21,7 @@ from magic512bot.services.task_run import (
     set_poll,
 )
 
-from .constants import Channels, Weekday
+from .constants import Channels, Roles, Weekday
 
 # Define the timezone at the top of the file
 MAX_USER_NOMINATIONS = 2
@@ -37,12 +37,41 @@ def is_nomination_period_active() -> bool:
     current_day = now.weekday()
     current_hour = now.hour
 
-    if (
+    return (
         (current_day == Weekday.THURSDAY.value and current_hour >= MORNING_HOUR.hour)
         or current_day in [Weekday.FRIDAY.value, Weekday.SATURDAY.value]
         or (current_day == Weekday.SUNDAY.value and current_hour < MORNING_HOUR.hour)
-    ):
+    )
+
+
+def is_poll_creation_period_active() -> bool:
+    """
+    Check if the poll creation period is currently active.
+    Polls are created from Sunday 9:00 AM to Tuesday 9:00 AM.
+    """
+    now = datetime.now(TIMEZONE)
+    current_day = now.weekday()
+    current_time = now.time()
+
+    LOGGER.debug(
+        f"Checking poll creation period: day={current_day}, time={current_time}, "
+        f"morning_hour={MORNING_HOUR}"
+    )
+
+    # Sunday after 9 AM
+    if current_day == Weekday.SUNDAY.value and current_time >= MORNING_HOUR:
+        LOGGER.debug("Poll creation active: Sunday after 9 AM")
         return True
+    # All day Monday
+    if current_day == Weekday.MONDAY.value:
+        LOGGER.debug("Poll creation active: Monday all day")
+        return True
+    # Tuesday before 9 AM
+    if current_day == Weekday.TUESDAY.value and current_time < MORNING_HOUR:
+        LOGGER.debug("Poll creation active: Tuesday before 9 AM")
+        return True
+
+    LOGGER.debug("Poll creation not active")
     return False
 
 
@@ -144,45 +173,24 @@ class Nomination(commands.Cog):
 
     async def have_sent_nominations_open_message(self) -> bool:
         """Check if we have sent the nominations open message for the current week."""
-        last_nominations_open = None
         with self.bot.db.begin() as session:
             last_nominations_open = get_last_nomination_open_date(session)
+
+        LOGGER.debug(f"Last nominations open date: {last_nominations_open}")
+
         if not last_nominations_open:
             return False
 
         now = datetime.now(TIMEZONE)
         today = now.date()
-        current_time = now.time()
-
-        # Find this week's Thursday date
-        days_until_thursday = (3 - today.weekday()) % 7  # 3 is Thursday
-        this_thursday = today + timedelta(days=days_until_thursday)
-
-        # If today is after Thursday or today is Thursday and time is after 9am,
-        # then we're in the valid period for sending
-        in_nominations_period = (today > this_thursday) or (
-            today == this_thursday and current_time >= time(9, 0, tzinfo=TIMEZONE)
-        )
-
-        # Find next Sunday date
-        days_until_sunday = (6 - today.weekday()) % 7  # 6 is Sunday
-        this_sunday = today + timedelta(days=days_until_sunday)
-
-        # If today is before Sunday or today is Sunday and time is before 9am,
-        # then we're still in the valid period
-        in_nominations_period = in_nominations_period and (
-            (today < this_sunday)
-            or (today == this_sunday and current_time < time(9, 0, tzinfo=TIMEZONE))
-        )
-
-        # If we're not in the nomination period, return False immediately
-        if not in_nominations_period:
-            return False
 
         # Calculate this week's Wednesday (the start of our week)
         # Wednesday is 2 in weekday()
         days_since_wednesday = (today.weekday() - 2) % 7
         this_wednesday = today - timedelta(days=days_since_wednesday)
+
+        LOGGER.debug(f"This Wednesday's date: {this_wednesday}")
+        LOGGER.debug(f"Checking if {last_nominations_open} >= {this_wednesday}")
 
         # Check if the last run was this week (on or after Wednesday)
         return last_nominations_open >= this_wednesday
@@ -226,11 +234,14 @@ class Nomination(commands.Cog):
         )
 
         # Check for missed nomination opening (Sunday 9:00 AM - Tuesday 9:00 AM)
-        if not await self.have_sent_nominations_open_message():
+        if (
+            is_nomination_period_active()
+            and not await self.have_sent_nominations_open_message()
+        ):
             LOGGER.info("Running missed nominations open task")
             await self.send_nominations_open_message()
 
-        if not await self.have_created_poll():
+        if is_poll_creation_period_active() and not await self.have_created_poll():
             LOGGER.info("Running missed poll creation task")
             await self.create_poll()
 
@@ -240,25 +251,24 @@ class Nomination(commands.Cog):
         now = datetime.now(TIMEZONE)
         today = now.date()
 
-        with self.bot.db.begin() as session:
-            last_nominations_open = get_last_nomination_open_date(session)
-            last_poll_creation = get_poll_last_run_date(session)
+        # Thursday - Open nominations, if we haven't run it today
+        if (
+            now.weekday() == Weekday.THURSDAY.value
+            and not await self.have_sent_nominations_open_message()
+        ):
+            await self.send_nominations_open_message()
+            LOGGER.info(f"Ran Nominations Open Task on {today} during Daily Check")
 
-            # Thursday - Open nominations, if we haven't run it today
-            if (
-                now.weekday() == Weekday.THURSDAY.value
-                and last_nominations_open != today
-            ):
-                await self.send_nominations_open_message()
-                LOGGER.info(f"Ran Nominations Open Task on {today} during Daily Check")
-
-            # Sunday - Create poll, if we haven't run it today
-            elif now.weekday() == Weekday.SUNDAY.value and last_poll_creation != today:
-                await self.create_poll()
-                LOGGER.info(f"Ran Poll Creation Task on {today} during Daily Check")
+        # Sunday - Create poll, if we haven't run it today
+        elif (
+            now.weekday() == Weekday.SUNDAY.value and not await self.have_created_poll()
+        ):
+            await self.create_poll()
+            LOGGER.info(f"Ran Poll Creation Task on {today} during Daily Check")
 
     async def send_nominations_open_message(self) -> None:
         """Send a message to open nominations."""
+        LOGGER.info("Attempting to send nominations open message...")
         channel = self.bot.get_channel(Channels.WC_WEDNESDAY_CHANNEL_ID)
         if not channel or not isinstance(channel, discord.TextChannel):
             LOGGER.error(
@@ -282,8 +292,11 @@ class Nomination(commands.Cog):
             LOGGER.info("Sent nominations open message")
 
             # Only update last run date if message was sent successfully
+            LOGGER.debug("Updating last run date in database...")
             with self.bot.db.begin() as session:
+                LOGGER.debug(f"Using session: {session}")
                 set_nomination(session)
+                LOGGER.debug("Last run date updated in database")
 
         except Exception as e:
             LOGGER.error(f"Error sending nominations open message: {e}")
@@ -340,15 +353,22 @@ class Nomination(commands.Cog):
                     poll.add_answer(text=f"{format_name}")
 
                 # Send the poll
+                LOGGER.debug("Sending poll message...")
                 poll_message = await channel.send(
                     content="# 🗳️ Format Voting 🗳️\n\nVote for next week's format!",
                     poll=poll,
                 )
+                LOGGER.debug(f"Poll message sent with ID: {poll_message.id}")
 
                 # Store the poll ID and clear nominations
+                LOGGER.debug("Clearing nominations...")
                 clear_all_nominations(session)
                 LOGGER.info(f"Created poll with {len(unique_formats)} format options")
+
+                LOGGER.debug(f"Setting poll with message ID {poll_message.id}")
+                LOGGER.debug(f"Using session: {session}")
                 set_poll(session, poll_message.id)
+                LOGGER.debug("Poll set in database")
 
             LOGGER.info("Successfully created poll")
 
@@ -449,9 +469,6 @@ class Nomination(commands.Cog):
         if not self.in_poll_checking_window():
             return
 
-        if await self.have_created_poll():
-            return
-
         with self.bot.db.begin() as session:
             active_poll_id = get_active_poll_id(session)
             if not active_poll_id:
@@ -482,6 +499,137 @@ class Nomination(commands.Cog):
                 LOGGER.warning(f"Active poll message {active_poll_id} not found")
             except Exception as e:
                 LOGGER.error(f"Error checking poll status: {e}", exc_info=True)
+
+    @app_commands.command(
+        name="debug-nominations", description="Debug information about nominations"
+    )
+    @app_commands.checks.has_role(Roles.MOD.value)
+    @app_commands.guild_only()
+    async def debug_nominations(self, interaction: discord.Interaction) -> None:
+        """Show debug information about nominations and polls."""
+        if not interaction.guild or not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message(
+                "This command can only be used in a server!", ephemeral=True
+            )
+            return
+
+        try:
+            # Create embed for debug info
+            embed = discord.Embed(
+                title="🔍 Nomination Debug Information",
+                color=discord.Color.blue(),
+            )
+
+            # Add current bot time
+            current_time = datetime.now(TIMEZONE)
+            embed.add_field(
+                name="Current Time",
+                value=(
+                    f"```\n"
+                    f"Time: {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+                    f"Weekday: {current_time.strftime('%A')}\n"
+                    f"Is Nomination Period Active: {is_nomination_period_active()}\n"
+                    f"Is Poll Creation Period Active: "
+                    f"{is_poll_creation_period_active()}\n"
+                    f"```"
+                ),
+                inline=False,
+            )
+
+            # Get all nominations and dates
+            with self.bot.db.begin() as session:
+                nominations = get_all_nominations(session)
+                active_poll_id = get_active_poll_id(session)
+                last_poll_date = get_poll_last_run_date(session)
+                last_nomination_date = get_last_nomination_open_date(session)
+
+                # Add nominations section
+                if nominations:
+                    nominations_text = ""
+                    for nom in nominations:
+                        if not hasattr(nom, "user_id") or not hasattr(nom, "format"):
+                            continue
+                        user = interaction.guild.get_member(nom.user_id)
+                        user_name = (
+                            user.display_name
+                            if user
+                            else f"Unknown (ID: {nom.user_id})"
+                        )
+                        nominations_text += f"{user_name}: {nom.format}\n"
+
+                    if nominations_text:
+                        embed.add_field(
+                            name=f"Nominations ({len(nominations)})",
+                            value=f"```\n{nominations_text}```",
+                            inline=False,
+                        )
+                    else:
+                        embed.add_field(
+                            name="Nominations",
+                            value="```\nNo valid nominations in database```",
+                            inline=False,
+                        )
+                else:
+                    embed.add_field(
+                        name="Nominations",
+                        value="```\nNo nominations in database```",
+                        inline=False,
+                    )
+
+                # Add task dates section
+                dates_text = (
+                    f"Last Poll Creation: "
+                    f"{
+                        last_poll_date.strftime('%Y-%m-%d')
+                        if last_poll_date
+                        else 'Never'
+                    }\n"
+                    f"Last Nominations Open: "
+                    f"{
+                        last_nomination_date.strftime('%Y-%m-%d')
+                        if last_nomination_date
+                        else 'Never'
+                    }"
+                )
+                embed.add_field(
+                    name="Task Dates",
+                    value=f"```\n{dates_text}```",
+                    inline=False,
+                )
+
+                # Add active poll section
+                poll_status = (
+                    f"Active Poll ID: {active_poll_id}"
+                    if active_poll_id
+                    else "No active poll"
+                )
+                embed.add_field(
+                    name="Poll Status", value=f"```\n{poll_status}```", inline=False
+                )
+
+            # Add task status section
+            nominations_open = await self.have_sent_nominations_open_message()
+            poll_created = await self.have_created_poll()
+
+            embed.add_field(
+                name="Task Status",
+                value=(
+                    f"```\n"
+                    f"have_sent_nominations_open_message: {nominations_open}\n"
+                    f"have_created_poll: {poll_created}\n"
+                    f"```"
+                ),
+                inline=False,
+            )
+
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        except Exception as e:
+            LOGGER.error(f"Error in debug-nominations command: {e}", exc_info=True)
+            await interaction.response.send_message(
+                "❌ Error retrieving debug information. Check logs for details.",
+                ephemeral=True,
+            )
 
 
 async def setup(bot: Magic512Bot) -> None:

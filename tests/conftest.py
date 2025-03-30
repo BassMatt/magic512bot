@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 import pytest
 import pytest_asyncio
-from freezegun import freeze_time
 from sqlalchemy.orm import Session
 
 # Add the project root to the path so we can import modules

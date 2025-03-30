@@ -45,7 +45,6 @@ combine-as-imports = true
     "PLR2004", # Magic value used in comparison
     "E501",    # Line too long
     "F811",    # Redefinition of unused name
-    "F401",    # Imported but unused
     "D103",    # Missing docstring in public function
     "PLR0913", # Too many arguments
 ]

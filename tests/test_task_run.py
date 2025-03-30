@@ -1,8 +1,10 @@
-from datetime import date, datetime
+from datetime import datetime, timedelta
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy.orm import Session
 
+from magic512bot.config import TIMEZONE
 from magic512bot.services.task_run import (
     get_active_poll_id,
     get_last_nomination_open_date,
@@ -53,3 +55,18 @@ def test_update_poll_id(db_session: Session) -> None:
 
     result = get_active_poll_id(db_session)
     assert result == new_id
+
+
+NOMINATION_PERIOD_SCENARIOS = [
+    pytest.param(
+        "2024-03-14 14:00:00", True, id="thursday_9am_open"
+    ),  # 9 AM EST = 14:00 UTC
+    pytest.param("2024-03-14 13:59:00", False, id="thursday_before_9am_closed"),
+    pytest.param("2024-03-17 13:59:00", True, id="sunday_before_9am_open"),
+    pytest.param("2024-03-17 14:00:00", False, id="sunday_9am_closed"),
+]
+
+patch(
+    "magic512bot.services.task_run.get_last_nomination_open_date",
+    return_value=datetime.now(TIMEZONE).date() - timedelta(days=1),
+)
