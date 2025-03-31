@@ -269,7 +269,7 @@ class RoleRequest(commands.Cog):
         )
         embed.add_field(
             name="User",
-            value=f"{interaction.user.mention}",
+            value=f"{interaction.user.display_name}",
             inline=False,
         )
         embed.add_field(name="Requested Role", value=role.mention, inline=False)
