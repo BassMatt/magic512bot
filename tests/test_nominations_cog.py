@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,7 +13,7 @@ from magic512bot.cogs.nomination import (
     Nomination,
     is_nomination_period_active,
 )
-from magic512bot.config import LOGGER, TIMEZONE
+from magic512bot.config import TIMEZONE
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -58,7 +58,7 @@ def create_test_datetime(date_str: str, hour: int, minute: int = 0) -> str:
     """Create a datetime string in UTC based on Central Time."""
     dt = datetime.strptime(date_str, "%Y-%m-%d")
     local_time = dt.replace(hour=hour, minute=minute, tzinfo=TIMEZONE)
-    utc_time = local_time.astimezone(timezone.utc)
+    utc_time = local_time.astimezone(UTC)
     return utc_time.strftime("%Y-%m-%d %H:%M:%S")
 
 

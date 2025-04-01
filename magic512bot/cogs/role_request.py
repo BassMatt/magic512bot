@@ -100,13 +100,15 @@ class RoleRequestView(discord.ui.View):
 
             with self.db.begin() as session:
                 LOGGER.info(
-                    f"Adding role {requested_role.name} to database for user {member.display_name}"
+                    f"Adding role {requested_role.name} to database for user \
+                        {member.display_name}"
                 )
                 add_user_sweat_role(
                     session, member.id, member.name, requested_role.name
                 )
             LOGGER.info(
-                f"Successfully added role {requested_role.name} to {member.display_name}"
+                f"Successfully added role {requested_role.name} to \
+                    {member.display_name}"
             )
 
             # DM the user
@@ -118,7 +120,8 @@ class RoleRequestView(discord.ui.View):
                 LOGGER.info(f"Sent DM to user {member.display_name}")
             except discord.HTTPException:
                 LOGGER.warning(
-                    f"Could not send DM to user {member.display_name} - DMs may be disabled"
+                    f"Could not send DM to user \
+                        {member.display_name} - DMs may be disabled"
                 )
 
             LOGGER.info(f"Processing milestone roles for user {member.display_name}")
@@ -142,7 +145,7 @@ class RoleRequestView(discord.ui.View):
                 f"Discord HTTP error while adding role - "
                 f"Role: {requested_role.name}, "
                 f"Member: {member.display_name}, "
-                f"Error: {str(e)}"
+                f"Error: {e!s}"
             )
             await interaction.response.send_message(
                 "❌ Failed to add role. Please check bot permissions.",
@@ -153,7 +156,7 @@ class RoleRequestView(discord.ui.View):
                 f"Unexpected error while adding role - "
                 f"Role: {requested_role.name}, "
                 f"Member: {member.display_name}, "
-                f"Error: {str(e)}",
+                f"Error: {e!s}",
                 exc_info=True,
             )
             await interaction.response.send_message(

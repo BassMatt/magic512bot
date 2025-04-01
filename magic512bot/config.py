@@ -12,6 +12,7 @@ TEST_GUILD_ID = 1074039539280121936
 DB_CONNECTION_STRING = os.getenv("DB_CONNECTION_STRING") or ""
 BOT_TOKEN = os.getenv("BOT_TOKEN") or ""
 TIMEZONE = ZoneInfo("America/Chicago")  # This handles CDT/CST automatically
+MODERATOR_CHANNEL_ID = 1074040269642661910
 
 
 def is_running_tests() -> bool:
