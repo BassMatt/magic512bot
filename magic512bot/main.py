@@ -51,6 +51,17 @@ class Magic512Bot(commands.Bot):
     async def on_ready(self) -> None:
         LOGGER.info(f"{self.user} has connected!")
 
+        # Add diagnostic logging for intents and member caching
+        LOGGER.info(f"Bot intents enabled: {self.intents}")
+        LOGGER.info(f"Member intent enabled: {self.intents.members}")
+
+        # Log guild member information
+        for guild in self.guilds:
+            LOGGER.info(f"Guild {guild.name} (ID: {guild.id}):")
+            LOGGER.info(f"  Total member count: {guild.member_count}")
+            LOGGER.info(f"  Cached member count: {len(guild.members)}")
+            LOGGER.info(f"  Bot's top role: {guild.me.top_role}")
+
     async def send_error_message(self, error_message: str) -> bool:
         """
         Sends an error message to the moderator channel.
@@ -103,6 +114,7 @@ async def main() -> None:
     intents.guilds = True  # Needed for basic guild/channel operations
     intents.guild_messages = True  # Needed to fetch messages
     intents.guild_scheduled_events = True  # Needed to create events
+    intents.members = True  # Needed to fetch members
 
     bot = Magic512Bot(command_prefix="!", intents=intents)
 
