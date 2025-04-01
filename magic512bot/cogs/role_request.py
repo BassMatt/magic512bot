@@ -42,61 +42,123 @@ class RoleRequestView(discord.ui.View):
     ) -> None:
         # Get the role and member
         if not (guild := interaction.guild):
+            LOGGER.error(
+                f"Guild not found for interaction from user {interaction.user.id}"
+            )
             await interaction.response.send_message(
                 "Unable to find guild information!", ephemeral=True
             )
             return
 
-        requested_role = guild.get_role(self.role_id)
-        member = guild.get_member(self.user_id)
+        LOGGER.info(
+            f"Processing role approval - Role ID: {self.role_id}, "
+            f"User ID: {self.user_id}, Guild ID: {guild.id}"
+        )
 
-        if requested_role and member:
+        if not (requested_role := guild.get_role(self.role_id)):
+            LOGGER.error(
+                f"Role not found - Role ID: {self.role_id}, Guild ID: {guild.id}"
+            )
+            await interaction.response.send_message(
+                "Unable to find role information!", ephemeral=True
+            )
+            return
+
+        if not (member := guild.get_member(self.user_id)):
+            LOGGER.error(
+                f"Member not found - User ID: {self.user_id}, Guild ID: {guild.id}"
+            )
+            await interaction.response.send_message(
+                "Unable to find member information!", ephemeral=True
+            )
+            return
+
+        LOGGER.info(
+            f"Found role and member - Role: {requested_role.name}, "
+            f"Member: {member.display_name}"
+        )
+
+        try:
+            if member.get_role(self.role_id):
+                LOGGER.warning(
+                    f"User already has role - User: {member.display_name}, "
+                    f"Role: {requested_role.name}"
+                )
+                await interaction.response.send_message(
+                    "User already has this role!", ephemeral=True
+                )
+                return
+
+            LOGGER.info(f"Syncing sweat roles for user {member.display_name}")
+            _sync_user_sweat_roles(member, self.db)
+
+            # Add Sweat Role to member, and db
+            LOGGER.info(
+                f"Adding role {requested_role.name} to member {member.display_name}"
+            )
+            await member.add_roles(requested_role)
+
+            with self.db.begin() as session:
+                LOGGER.info(
+                    f"Adding role {requested_role.name} to database for user {member.display_name}"
+                )
+                add_user_sweat_role(
+                    session, member.id, member.name, requested_role.name
+                )
+            LOGGER.info(
+                f"Successfully added role {requested_role.name} to {member.display_name}"
+            )
+
+            # DM the user
             try:
-                if member.get_role(self.role_id):
-                    await interaction.response.send_message(
-                        "User already has this role!", ephemeral=True
-                    )
-                    return
-
-                _sync_user_sweat_roles(member, self.db)
-
-                # Add Sweat Role to member, and db
-                LOGGER.info("Adding Requested Role to Discord Member")
-                await member.add_roles(requested_role)
-                with self.db.begin() as session:
-                    add_user_sweat_role(
-                        session, member.id, member.name, requested_role.name
-                    )
-                LOGGER.info("Successfully Added Requested Role to Discord Member")
-
-                # DM the user
                 await member.send(
                     f"Your request for the role {requested_role.name} "
                     + "has been approved! 🎉"
                 )
-
-                await _process_user_milestone_roles(member, guild, self.db)
-
-                # Send confirmation
-                await interaction.response.send_message(
-                    f"✅ {interaction.user.mention} Approved role"
-                    + f" {requested_role.name} for {member.mention}",
-                    allowed_mentions=discord.AllowedMentions.none(),
-                )
-
-                # Disable the button
-                self.disable_buttons()
-                if message := interaction.message:
-                    await message.edit(view=self)
-
+                LOGGER.info(f"Sent DM to user {member.display_name}")
             except discord.HTTPException:
-                await interaction.response.send_message(
-                    "❌ Failed to add role. Please check bot permissions.",
-                    ephemeral=True,
+                LOGGER.warning(
+                    f"Could not send DM to user {member.display_name} - DMs may be disabled"
                 )
-        else:
+
+            LOGGER.info(f"Processing milestone roles for user {member.display_name}")
+            await _process_user_milestone_roles(member, guild, self.db)
+
+            # Send confirmation
             await interaction.response.send_message(
-                "❌ Could not find role or member.", ephemeral=True
+                f"✅ {interaction.user.mention} Approved role"
+                + f" {requested_role.name} for {member.mention}",
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+
+            # Disable the button
+            self.disable_buttons()
+            if message := interaction.message:
+                await message.edit(view=self)
+                LOGGER.info("Disabled approval buttons")
+
+        except discord.HTTPException as e:
+            LOGGER.error(
+                f"Discord HTTP error while adding role - "
+                f"Role: {requested_role.name}, "
+                f"Member: {member.display_name}, "
+                f"Error: {str(e)}"
+            )
+            await interaction.response.send_message(
+                "❌ Failed to add role. Please check bot permissions.",
+                ephemeral=True,
+            )
+        except Exception as e:
+            LOGGER.error(
+                f"Unexpected error while adding role - "
+                f"Role: {requested_role.name}, "
+                f"Member: {member.display_name}, "
+                f"Error: {str(e)}",
+                exc_info=True,
+            )
+            await interaction.response.send_message(
+                "❌ An unexpected error occurred. Please check the logs.",
+                ephemeral=True,
             )
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.red)
