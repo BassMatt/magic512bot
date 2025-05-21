@@ -19,6 +19,7 @@ from magic512bot.services.task_run import (
     get_poll_last_run_date,
     set_nomination,
     set_poll,
+    should_run_nominations_this_week,
 )
 
 from .constants import Channels, Roles, Weekday
@@ -95,7 +96,6 @@ class Nomination(commands.Cog):
     async def cog_unload(self) -> None:
         """Cancel the daily check when the cog is unloaded."""
         self.daily_check.cancel()
-        self.check_poll_status.cancel()
 
     @app_commands.command(name="nominate", description="Nominate a format to play next")
     @app_commands.describe(format="The format you want to nominate")
@@ -108,11 +108,21 @@ class Nomination(commands.Cog):
             )
             return
 
+        # Check if this is a nomination week
+        with self.bot.db.begin() as session:
+            if not should_run_nominations_this_week(session):
+                await interaction.response.send_message(
+                    "Nominations are not open this week. "
+                    "Nominations are open every other week.",
+                    ephemeral=True,
+                )
+                return
+
         # Check if nominations are currently open
         if not is_nomination_period_active():
             await interaction.response.send_message(
                 "Nominations are currently closed. "
-                "Nominations are open from Sunday 9:00 AM to Tuesday 9:00 AM.",
+                "Nominations are open from Thursday 9:00 AM to Sunday 9:00 AM.",
                 ephemeral=True,
             )
             return
@@ -224,8 +234,8 @@ class Nomination(commands.Cog):
         Check if any tasks were missed while the bot was down.
 
         Windows for missed tasks:
-        - Nominations: Thursday 9AM -> Sunday 9AM
-        - Poll Creation: Sunday 9AM -> Tuesday 9AM
+        - Nominations: Thursday 9AM -> Sunday 9AM (every other week)
+        - Poll Creation: Sunday 9AM -> Tuesday 9AM (every other week)
         """
         now = datetime.now(TIMEZONE)
         LOGGER.info(
@@ -233,17 +243,23 @@ class Nomination(commands.Cog):
             f"    (weekday: {now.weekday()}, hour: {now.hour})"
         )
 
-        # Check for missed nomination opening (Sunday 9:00 AM - Tuesday 9:00 AM)
-        if (
-            is_nomination_period_active()
-            and not await self.have_sent_nominations_open_message()
-        ):
-            LOGGER.info("Running missed nominations open task")
-            await self.send_nominations_open_message()
+        with self.bot.db.begin() as session:
+            # Check if this is a nomination week
+            if not should_run_nominations_this_week(session):
+                LOGGER.info("This is not a nomination week, skipping nomination tasks")
+                return
 
-        if is_poll_creation_period_active() and not await self.have_created_poll():
-            LOGGER.info("Running missed poll creation task")
-            await self.create_poll()
+            # Check for missed nomination opening (Thursday 9:00 AM - Sunday 9:00 AM)
+            if (
+                is_nomination_period_active()
+                and not await self.have_sent_nominations_open_message()
+            ):
+                LOGGER.info("Running missed nominations open task")
+                await self.send_nominations_open_message()
+
+            if is_poll_creation_period_active() and not await self.have_created_poll():
+                LOGGER.info("Running missed poll creation task")
+                await self.create_poll()
 
     @tasks.loop(time=MORNING_HOUR)
     async def daily_check(self) -> None:
@@ -251,20 +267,27 @@ class Nomination(commands.Cog):
         now = datetime.now(TIMEZONE)
         today = now.date()
 
-        # Thursday - Open nominations, if we haven't run it today
-        if (
-            now.weekday() == Weekday.THURSDAY.value
-            and not await self.have_sent_nominations_open_message()
-        ):
-            await self.send_nominations_open_message()
-            LOGGER.info(f"Ran Nominations Open Task on {today} during Daily Check")
+        with self.bot.db.begin() as session:
+            # Check if this is a nomination week
+            if not should_run_nominations_this_week(session):
+                LOGGER.info("This is not a nomination week, skipping nomination tasks")
+                return
 
-        # Sunday - Create poll, if we haven't run it today
-        elif (
-            now.weekday() == Weekday.SUNDAY.value and not await self.have_created_poll()
-        ):
-            await self.create_poll()
-            LOGGER.info(f"Ran Poll Creation Task on {today} during Daily Check")
+            # Thursday - Open nominations, if we haven't run it today
+            if (
+                now.weekday() == Weekday.THURSDAY.value
+                and not await self.have_sent_nominations_open_message()
+            ):
+                await self.send_nominations_open_message()
+                LOGGER.info(f"Ran Nominations Open Task on {today} during Daily Check")
+
+            # Sunday - Create poll, if we haven't run it today
+            elif (
+                now.weekday() == Weekday.SUNDAY.value
+                and not await self.have_created_poll()
+            ):
+                await self.create_poll()
+                LOGGER.info(f"Ran Poll Creation Task on {today} during Daily Check")
 
     async def send_nominations_open_message(self) -> None:
         """Send a message to open nominations."""
@@ -282,7 +305,8 @@ class Nomination(commands.Cog):
                 description=(
                     "Nominate formats for next week's WC Wednesday!\n\n"
                     "Use `/nominate format=format_name` to submit your nomination.\n"
-                    "Nominations will close on Sunday at 9:00 AM when voting begins."
+                    "Nominations will close on Sunday at 9:00 AM when voting begins.\n\n"
+                    "Note: Nominations are open every other week."
                 ),
                 color=discord.Color.blue(),
             )
@@ -376,66 +400,6 @@ class Nomination(commands.Cog):
             LOGGER.error(f"Error creating poll: {e}", exc_info=True)
             raise
 
-    async def create_wc_wednesday_event(self, format: str) -> None:
-        """Create a Discord event for the winning format."""
-        LOGGER.info(f"Creating event for format: {format}")
-
-        channel = self.bot.get_channel(Channels.WC_WEDNESDAY_CHANNEL_ID)
-        if not isinstance(channel, discord.TextChannel):
-            LOGGER.error("Could not find WC Wednesday channel")
-            return
-
-        try:
-            # Use the helper method
-            next_wednesday = self.get_next_wednesday()
-
-            # Check if event already exists
-            existing_events = await channel.guild.fetch_scheduled_events()
-            for event in existing_events:
-                if (
-                    event.name.startswith("WC Wednesday:")
-                    and event.start_time.date() == next_wednesday
-                ):
-                    LOGGER.info("Event already exists for next Wednesday")
-                    return
-
-            # Cube takes 30 more minutes because draft
-            is_cube_format = "cube" in format.lower()
-            start_hour = 18 if is_cube_format else 19
-            start_minute = 30 if is_cube_format else 0
-
-            start_time = datetime.combine(
-                next_wednesday,
-                time(hour=start_hour, minute=start_minute, tzinfo=TIMEZONE),
-            )
-            end_time = start_time + timedelta(hours=2)
-
-            # Create the event
-            event = await channel.guild.create_scheduled_event(
-                name=f"WC Wednesday: {format}",
-                description=(
-                    f"This week's WC Wednesday we're playing **{format}**!\n\n"
-                    f"Come join us at Pat's Games :)"
-                ),
-                start_time=start_time,
-                end_time=end_time,
-                location="Pat's Games",
-                privacy_level=discord.PrivacyLevel.guild_only,
-            )
-
-            await channel.send(
-                f"# 📅 Event Created! 📅\n\n"
-                f"The winning format is **{format}**!\n\n"
-                f"An event has been scheduled for Wednesday at 7:00 PM. "
-                f"Click here to RSVP: {event.url}"
-            )
-
-        except Exception as e:
-            LOGGER.error(f"Error creating event: {e}", exc_info=True)
-            await self.bot.send_error_message(
-                "There was an error creating the event. Please create it manually."
-            )
-
     def in_poll_checking_window(self) -> bool:
         """
         Check if we're in the poll checking window (Sunday 9PM to Tuesday 9AM).
@@ -462,48 +426,10 @@ class Nomination(commands.Cog):
 
         return False
 
-    @tasks.loop(minutes=5)
-    async def check_poll_status(self) -> None:
-        """Periodically check if active poll has ended."""
-        # Only run during poll window
-        if not self.in_poll_checking_window():
-            return
-
-        with self.bot.db.begin() as session:
-            active_poll_id = get_active_poll_id(session)
-            if not active_poll_id:
-                LOGGER.warning("No active poll ID found")
-                return
-
-            LOGGER.debug(f"Checking status of active poll: {active_poll_id}")
-            try:
-                channel = self.bot.get_channel(Channels.WC_WEDNESDAY_CHANNEL_ID)
-                if not isinstance(channel, discord.TextChannel):
-                    LOGGER.warning("Could not find WC Wednesday channel")
-                    return
-
-                message = await channel.fetch_message(active_poll_id)
-                if not hasattr(message, "poll") or not message.poll:
-                    LOGGER.warning("Active poll message does not have a poll")
-                    return
-
-                if message.poll.is_finalised():
-                    LOGGER.info("Found ended poll, processing results")
-                    if not (victor_answer := message.poll.victor_answer):
-                        LOGGER.warning("No victor answer found for poll")
-                        return
-
-                    await self.create_wc_wednesday_event(format=str(victor_answer))
-
-            except discord.NotFound:
-                LOGGER.warning(f"Active poll message {active_poll_id} not found")
-            except Exception as e:
-                LOGGER.error(f"Error checking poll status: {e}", exc_info=True)
-
     @app_commands.command(
         name="debug-nominations", description="Debug information about nominations"
     )
-    @app_commands.checks.has_role(Roles.MOD.value)
+    @app_commands.checks.has_role(Roles.MOD.role_id)
     @app_commands.guild_only()
     async def debug_nominations(self, interaction: discord.Interaction) -> None:
         """Show debug information about nominations and polls."""

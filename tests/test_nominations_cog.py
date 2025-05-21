@@ -184,6 +184,10 @@ async def test_nominate_command(
                 return_value=existing_nominations,
             ),
             patch("magic512bot.cogs.nomination.add_nomination") as mock_add,
+            patch(
+                "magic512bot.cogs.nomination.should_run_nominations_this_week",
+                return_value=True,
+            ),
         ):
             nominate_command = cast(
                 app_commands.Command[Any, Any, Any], nomination_cog.nominate
@@ -228,6 +232,10 @@ async def test_nominate_command_error(
             "magic512bot.cogs.nomination.add_nomination",
             side_effect=ValueError("Test error"),
         ),
+        patch(
+            "magic512bot.cogs.nomination.should_run_nominations_this_week",
+            return_value=True,
+        ),
     ):
         # Cast the command to the correct type and get its callback
         nominate_command = cast(app_commands.Command[Any, Any, Any], cog.nominate)
@@ -257,26 +265,33 @@ async def test_nominate_command_exception(
     mock_interaction.user = MagicMock(spec=discord.Member)
     mock_interaction.user.id = 12345
 
-    with patch(
-        "magic512bot.cogs.nomination.is_nomination_period_active", return_value=True
+    with (
+        patch(
+            "magic512bot.cogs.nomination.is_nomination_period_active",
+            return_value=True,
+        ),
+        patch("magic512bot.cogs.nomination.get_user_nominations", return_value=[]),
+        patch(
+            "magic512bot.cogs.nomination.add_nomination",
+            side_effect=Exception("Unexpected error"),
+        ),
+        patch(
+            "magic512bot.cogs.nomination.should_run_nominations_this_week",
+            return_value=True,
+        ),
     ):
-        with patch("magic512bot.cogs.nomination.get_user_nominations", return_value=[]):
-            with patch(
-                "magic512bot.cogs.nomination.add_nomination",
-                side_effect=Exception("Unexpected error"),
-            ):
-                # Cast the command to the correct type and get its callback
-                nominate_command = cast(app_commands.Command, cog.nominate)
-                callback = cast(
-                    Callable[[Any, discord.Interaction, str], Any],
-                    nominate_command.callback,
-                )
-                await callback(cog, mock_interaction, "Modern")
+        # Cast the command to the correct type and get its callback
+        nominate_command = cast(app_commands.Command, cog.nominate)
+        callback = cast(
+            Callable[[Any, discord.Interaction, str], Any],
+            nominate_command.callback,
+        )
+        await callback(cog, mock_interaction, "Modern")
 
-                mock_interaction.response.send_message.assert_called_once()
-                message = mock_interaction.response.send_message.call_args[0][0]
-                assert "❌" in message
-                assert "error" in message.lower()
+        mock_interaction.response.send_message.assert_called_once()
+        message = mock_interaction.response.send_message.call_args[0][0]
+        assert "❌" in message
+        assert "error" in message.lower()
 
 
 @pytest.mark.asyncio
@@ -293,8 +308,15 @@ async def test_nominate_command_format_too_long(
     mock_interaction.user = MagicMock(spec=discord.Member)
     mock_interaction.user.id = 12345
 
-    with patch(
-        "magic512bot.cogs.nomination.is_nomination_period_active", return_value=True
+    with (
+        patch(
+            "magic512bot.cogs.nomination.is_nomination_period_active",
+            return_value=True,
+        ),
+        patch(
+            "magic512bot.cogs.nomination.should_run_nominations_this_week",
+            return_value=True,
+        ),
     ):
         long_format = "A" * 56
         # Cast the command to the correct type and get its callback
@@ -329,36 +351,39 @@ async def test_nominate_command_success_with_channel_message(
     mock_channel.send = AsyncMock()
     mock_bot.get_channel.return_value = mock_channel
 
-    with patch(
-        "magic512bot.cogs.nomination.is_nomination_period_active", return_value=True
+    with (
+        patch(
+            "magic512bot.cogs.nomination.is_nomination_period_active", return_value=True
+        ),
+        patch("magic512bot.cogs.nomination.get_user_nominations", return_value=[]),
+        patch("magic512bot.cogs.nomination.add_nomination") as mock_add,
+        patch(
+            "magic512bot.cogs.nomination.should_run_nominations_this_week",
+            return_value=True,
+        ),
     ):
-        with patch("magic512bot.cogs.nomination.get_user_nominations", return_value=[]):
-            with patch("magic512bot.cogs.nomination.add_nomination") as mock_add:
-                # Cast the command to the correct type and get its callback
-                nominate_command = cast(app_commands.Command, cog.nominate)
-                callback = cast(
-                    Callable[[Any, discord.Interaction, str], Any],
-                    nominate_command.callback,
-                )
-                await callback(cog, mock_interaction, "Modern")
+        # Cast the command to the correct type and get its callback
+        nominate_command = cast(app_commands.Command, cog.nominate)
+        callback = cast(
+            Callable[[Any, discord.Interaction, str], Any],
+            nominate_command.callback,
+        )
+        await callback(cog, mock_interaction, "Modern")
 
-                mock_add.assert_called_once()
-                assert mock_add.call_args[1]["user_id"] == mock_interaction.user.id
-                assert mock_add.call_args[1]["format"] == "Modern"
+        mock_add.assert_called_once()
+        assert mock_add.call_args[1]["user_id"] == mock_interaction.user.id
+        assert mock_add.call_args[1]["format"] == "Modern"
 
-                mock_interaction.response.send_message.assert_called_once()
-                user_message = mock_interaction.response.send_message.call_args[0][0]
-                assert "Your nomination for **Modern**" in user_message
-                assert (
-                    mock_interaction.response.send_message.call_args[1]["ephemeral"]
-                    is True
-                )
+        mock_interaction.response.send_message.assert_called_once()
+        user_message = mock_interaction.response.send_message.call_args[0][0]
+        assert "Your nomination for **Modern**" in user_message
+        assert mock_interaction.response.send_message.call_args[1]["ephemeral"] is True
 
-                mock_bot.get_channel.assert_called_once()
-                mock_channel.send.assert_called_once()
-                channel_message = mock_channel.send.call_args[0][0]
-                assert "has nominated" in channel_message
-                assert "Modern" in channel_message
+        mock_bot.get_channel.assert_called_once()
+        mock_channel.send.assert_called_once()
+        channel_message = mock_channel.send.call_args[0][0]
+        assert "has nominated" in channel_message
+        assert "Modern" in channel_message
 
 
 @pytest.mark.asyncio
@@ -379,24 +404,30 @@ async def test_nominate_command_success_channel_not_found(
 
     mock_bot.get_channel.return_value = None
 
-    with patch(
-        "magic512bot.cogs.nomination.is_nomination_period_active", return_value=True
+    with (
+        patch(
+            "magic512bot.cogs.nomination.is_nomination_period_active", return_value=True
+        ),
+        patch("magic512bot.cogs.nomination.get_user_nominations", return_value=[]),
+        patch("magic512bot.cogs.nomination.add_nomination") as mock_add,
+        patch(
+            "magic512bot.cogs.nomination.should_run_nominations_this_week",
+            return_value=True,
+        ),
     ):
-        with patch("magic512bot.cogs.nomination.get_user_nominations", return_value=[]):
-            with patch("magic512bot.cogs.nomination.add_nomination") as mock_add:
-                # Cast the command to the correct type and get its callback
-                nominate_command = cast(app_commands.Command, cog.nominate)
-                callback = cast(
-                    Callable[[Any, discord.Interaction, str], Any],
-                    nominate_command.callback,
-                )
-                await callback(cog, mock_interaction, "Modern")
+        # Cast the command to the correct type and get its callback
+        nominate_command = cast(app_commands.Command, cog.nominate)
+        callback = cast(
+            Callable[[Any, discord.Interaction, str], Any],
+            nominate_command.callback,
+        )
+        await callback(cog, mock_interaction, "Modern")
 
-                mock_add.assert_called_once()
-                mock_interaction.response.send_message.assert_called_once()
-                user_message = mock_interaction.response.send_message.call_args[0][0]
-                assert "Your nomination for **Modern**" in user_message
-                mock_bot.get_channel.assert_called_once()
+        mock_add.assert_called_once()
+        mock_interaction.response.send_message.assert_called_once()
+        user_message = mock_interaction.response.send_message.call_args[0][0]
+        assert "Your nomination for **Modern**" in user_message
+        mock_bot.get_channel.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -415,6 +446,10 @@ async def test_check_missed_tasks_nominations_saturday(
         patch(
             "magic512bot.cogs.nomination.get_last_nomination_open_date",
             return_value=None,
+        ),
+        patch(
+            "magic512bot.cogs.nomination.should_run_nominations_this_week",
+            return_value=True,
         ),
     ):
         mock_tasks_dt.now = MagicMock(return_value=datetime(2024, 3, 16, 10, 0))
@@ -606,6 +641,10 @@ async def test_check_missed_tasks(
                         "magic512bot.cogs.nomination.get_poll_last_run_date",
                         return_value=last_poll_date,
                     ),
+                    patch(
+                        "magic512bot.cogs.nomination.should_run_nominations_this_week",
+                        return_value=True,
+                    ),
                 ):
                     await cog.check_missed_tasks()
 
@@ -674,6 +713,10 @@ async def test_daily_check(
             patch(
                 "magic512bot.cogs.nomination.get_last_nomination_open_date",
                 return_value=None,
+            ),
+            patch(
+                "magic512bot.cogs.nomination.should_run_nominations_this_week",
+                return_value=True,
             ),
         ):
             await cog.daily_check()
@@ -744,7 +787,6 @@ async def test_check_missed_tasks_individual_scenarios(
     """Test specific scenarios for check_missed_tasks."""
     with freeze_time(test_time):
         cog = nomination_cog_with_mocks["cog"]
-        mock_session = nomination_cog_with_mocks["session"]
 
         # Create mocks for the task methods
         cog.send_nominations_open_message = AsyncMock()
@@ -759,6 +801,10 @@ async def test_check_missed_tasks_individual_scenarios(
             patch(
                 "magic512bot.cogs.nomination.get_poll_last_run_date",
                 return_value=None,
+            ),
+            patch(
+                "magic512bot.cogs.nomination.should_run_nominations_this_week",
+                return_value=True,
             ),
         ):
             await cog.check_missed_tasks()
@@ -850,9 +896,21 @@ async def test_check_missed_tasks_basic(nomination_cog: Nomination) -> None:
             nomination_cog, "have_sent_nominations_open_message", return_value=False
         ),
         patch.object(nomination_cog, "send_nominations_open_message") as mock_send,
+        patch(
+            "magic512bot.cogs.nomination.should_run_nominations_this_week",
+            return_value=True,
+        ),
     ):
-        await nomination_cog.check_missed_tasks()
-        mock_send.assert_called_once()
+        # Create a mock session that will be returned by the context manager
+        mock_session = MagicMock()
+        mock_context = MagicMock()
+        mock_context.__enter__ = MagicMock(return_value=mock_session)
+        mock_context.__exit__ = MagicMock(return_value=None)
+
+        # Make the bot's db.begin() return our mock context
+        with patch.object(nomination_cog.bot.db, "begin", return_value=mock_context):
+            await nomination_cog.check_missed_tasks()
+            mock_send.assert_called_once()
 
 
 @pytest.fixture
@@ -867,3 +925,28 @@ def nomination_cog_with_mocks() -> dict[str, Any]:
         mock_bot.wait_until_ready = AsyncMock()
 
     return {"cog": cog, "session": mock_session, "bot": mock_bot}
+
+
+@pytest.mark.asyncio
+async def test_nominate_command_not_nomination_week(
+    nomination_cog: Nomination,
+    mock_interaction: MagicMock,
+) -> None:
+    """Test nomination command when it's not a nomination week."""
+    with patch(
+        "magic512bot.cogs.nomination.should_run_nominations_this_week",
+        return_value=False,
+    ):
+        nominate_command = cast(
+            app_commands.Command[Any, Any, Any], nomination_cog.nominate
+        )
+        callback = cast(
+            Callable[[Any, MagicMock, str], Awaitable[None]],
+            nominate_command.callback,
+        )
+        await callback(nomination_cog, mock_interaction, "Modern")
+
+        mock_interaction.response.send_message.assert_called_once()
+        message = mock_interaction.response.send_message.call_args[0][0]
+        assert "Nominations are not open this week" in message
+        assert mock_interaction.response.send_message.call_args[1]["ephemeral"] is True

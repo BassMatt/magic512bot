@@ -9,8 +9,6 @@ from discord import app_commands
 from magic512bot.cogs.role_request import (
     RoleRequest,
     Roles,
-    _process_user_milestone_roles,
-    _sync_user_sweat_roles,
 )
 from magic512bot.config import LOGGER
 
@@ -144,47 +142,6 @@ async def test_request_role(
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_db(
-    mock_bot: MagicMock,
-    mock_interaction: discord.Interaction,
-) -> None:
-    """Test the bootstrap_db command."""
-    cog = RoleRequest(mock_bot)
-
-    # Create mock members
-    mock_members = [
-        MagicMock(spec=discord.Member, bot=False),
-        MagicMock(spec=discord.Member, bot=True),
-    ]
-
-    # Set up the guild mock
-    guild_mock = cast(discord.Guild, mock_interaction.guild)
-    with patch.object(
-        type(guild_mock), "members", new_callable=PropertyMock
-    ) as mock_members_prop:
-        mock_members_prop.return_value = mock_members
-
-        # Mock _sync_user_sweat_roles
-        with patch(
-            "magic512bot.cogs.role_request._sync_user_sweat_roles", return_value=set()
-        ) as mock_sync:
-            # Cast the command to the correct type and get its callback
-            bootstrap_db_command = cast(app_commands.Command, cog.bootstrap_db)
-            callback = cast(
-                Callable[[Any, discord.Interaction], Any],
-                bootstrap_db_command.callback,
-            )
-            await callback(cog, mock_interaction)
-
-            # Verify that the response was sent
-            mock_send = cast(AsyncMock, mock_interaction.response.send_message)
-            assert mock_send.await_count == 1
-
-            # Verify that _sync_user_sweat_roles was called for non-bot members
-            mock_sync.assert_called_once_with(mock_members[0], mock_bot.db)
-
-
-@pytest.mark.asyncio
 async def test_sweat_leaderboard(
     mock_interaction: discord.Interaction,
 ) -> None:
@@ -309,93 +266,3 @@ class MemberMock(MagicMock):
     def roles(self, value: list[discord.Role]) -> None:
         """Set the roles list."""
         self._roles = value
-
-
-def test_sync_user_sweat_roles(
-    db_session: Any,
-) -> None:
-    """Test the _sync_user_sweat_roles function."""
-    # Create a mock sessionmaker that returns our test session
-    mock_sessionmaker = MagicMock()
-    mock_sessionmaker.begin.return_value.__enter__.return_value = db_session
-
-    # Create a mock member with our custom class
-    mock_member = MemberMock(spec=discord.Member)
-    mock_member.id = 67890
-    mock_member.display_name = "TestMember"
-    mock_member.mention = "<@67890>"
-
-    # Mock the member's roles
-    role1 = MagicMock(spec=discord.Role)
-    role1.name = "Standard Sweat"
-    role2 = MagicMock(spec=discord.Role)
-    role2.name = "Modern Sweat"
-    mock_roles = cast(list[discord.Role], [role1, role2])
-    mock_member.roles = mock_roles
-    LOGGER.debug(f"Created mock roles: {[r.name for r in mock_roles]}")
-
-    # Mock get_user_sweat_roles to return an empty list
-    with patch("magic512bot.cogs.role_request.get_user_sweat_roles", return_value=[]):
-        # Mock SWEAT_ROLES to include our test roles
-        with patch(
-            "magic512bot.cogs.role_request.SWEAT_ROLES",
-            {"Standard Sweat": 123, "Modern Sweat": 456},
-        ):
-            LOGGER.debug("About to call _sync_user_sweat_roles")
-            # Call _sync_user_sweat_roles
-            result = _sync_user_sweat_roles(mock_member, mock_sessionmaker)
-            LOGGER.debug(f"Got result: {result}")
-
-            # Verify the result
-            assert "Standard Sweat" in result
-            assert "Modern Sweat" in result
-            assert result == {"Standard Sweat", "Modern Sweat"}
-
-
-@pytest.mark.asyncio
-async def test_process_user_milestone_roles(
-    mock_member: discord.Member,
-    db_session: Any,
-) -> None:
-    """Test the _process_user_milestone_roles function."""
-    # Create a mock sessionmaker that returns our test session
-    mock_sessionmaker = MagicMock()
-    mock_sessionmaker.begin.return_value.__enter__.return_value = db_session
-
-    # Mock the guild
-    mock_guild = MagicMock(spec=discord.Guild)
-
-    # Mock get_user_sweat_roles to return 8 roles (enough for OmniSweat)
-    with patch(
-        "magic512bot.cogs.role_request.get_user_sweat_roles",
-        return_value=[
-            "Role1",
-            "Role2",
-            "Role3",
-            "Role4",
-            "Role5",
-            "Role6",
-            "Role7",
-            "Role8",
-        ],
-    ):
-        # Mock the guild.get_role function
-        omni_role = MagicMock(spec=discord.Role)
-        with patch.object(mock_guild, "get_role") as mock_get_role:
-            mock_get_role.return_value = omni_role
-
-            # Call _process_user_milestone_roles
-            await _process_user_milestone_roles(
-                mock_member, mock_guild, mock_sessionmaker
-            )
-
-            # Verify that the role was added
-            mock_add_roles = cast(AsyncMock, mock_member.add_roles)
-            assert mock_add_roles.await_count == 1
-
-            # Verify that the DM was sent
-            mock_send = cast(AsyncMock, mock_member.send)
-            assert mock_send.await_count == 1
-            send_message_call = mock_send.await_args_list[0]
-            message = send_message_call[0][0]
-            assert "Omni Sweat" in message
