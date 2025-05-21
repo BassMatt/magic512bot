@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import BigInteger, Date, String
+from sqlalchemy import BigInteger, Date, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -11,6 +11,7 @@ class TaskRun(Base):
 
     __tablename__ = "task_runs"
 
-    task_name: Mapped[str] = mapped_column(String, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_name: Mapped[str] = mapped_column(String(50), nullable=False)
     last_run_date: Mapped[date] = mapped_column(Date, nullable=False)
-    active_poll_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    poll_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

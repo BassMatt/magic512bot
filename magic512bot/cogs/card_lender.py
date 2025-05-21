@@ -5,7 +5,7 @@ from discord import app_commands
 from discord.ext import commands
 from sqlalchemy.orm import Session, sessionmaker
 
-from magic512bot.cogs.role_request import Roles
+from magic512bot.cogs.constants import Roles
 from magic512bot.config import LOGGER
 from magic512bot.errors import CardListInputError, CardNotFoundError
 from magic512bot.main import Magic512Bot
@@ -123,7 +123,7 @@ class CardLender(commands.Cog):
         LOGGER.info("CardLender Cog Initialized")
 
     @app_commands.command(name="loan", description="Loan a card")
-    @app_commands.checks.has_role(Roles.TEAM.value)
+    @app_commands.checks.has_role(Roles.TEAM.role_id)
     @app_commands.describe(
         borrower="Team member you wish to lend cards to",
         tag="Order tag for bulk returning cards",
@@ -140,7 +140,7 @@ class CardLender(commands.Cog):
         await interaction.response.send_modal(loan_modal)
 
     @app_commands.command(name="return", description="Return a card")
-    @app_commands.checks.has_role(Roles.TEAM.value)
+    @app_commands.checks.has_role(Roles.TEAM.role_id)
     @app_commands.describe(
         borrower="@mention member that is returning the loaned cards",
         tag="Return cards with a given order tag",
@@ -157,7 +157,7 @@ class CardLender(commands.Cog):
         await interaction.response.send_modal(return_modal)
 
     @app_commands.command(name="bulk-return", description="Return many cards")
-    @app_commands.checks.has_role(Roles.TEAM.value)
+    @app_commands.checks.has_role(Roles.TEAM.role_id)
     @app_commands.describe(
         borrower="@mention member that is returning the loaned cards",
         tag="Return cards with a given order tag",
@@ -186,7 +186,7 @@ class CardLender(commands.Cog):
     @app_commands.command(
         name="list-loans", description="Check loans from given borrower"
     )
-    @app_commands.checks.has_role(Roles.TEAM.value)
+    @app_commands.checks.has_role(Roles.TEAM.role_id)
     @app_commands.describe(
         borrower="@mention member that you are loaning cards to",
         tag="Query for cards with given order tag",
@@ -218,7 +218,7 @@ class CardLender(commands.Cog):
     @app_commands.command(
         name="list-all-loans", description="Check loans from all borrowers"
     )
-    @app_commands.checks.has_role(Roles.TEAM.value)
+    @app_commands.checks.has_role(Roles.TEAM.role_id)
     async def list_all_loans_handler(self, interaction: discord.Interaction):
         with self.bot.db.begin() as session:
             results = bulk_get_cardloans(session=session, lender=interaction.user.id)
