@@ -6,7 +6,7 @@ steps:
       - kubernetes:
           sidecars:
           - image: docker:dind
-            command: [dockerd-entrypoint.sh]
+            name: dind
             env:
               - name: DOCKER_TLS_CERTDIR
                 value: ""
@@ -15,15 +15,14 @@ steps:
                 name: docker-sock
             securityContext:
               privileged: true
-              allowPrivilegeEscalation: true
-          mirrorVolumeMounts: true
           podSpec:
             containers:
-              - image: alpine/docker-with-buildx:latest
+              - image: docker:cli
                 volumeMounts:
                   - mountPath: /var/run/
                     name: docker-sock
-                  - mountPath: /root/.docker
+                  - mountPath: /root/.docker/config.json
+                    subPath: config.json
                     name: dockerhub-cred
                 command:
                   - .buildkite/build.sh
