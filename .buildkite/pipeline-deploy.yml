@@ -47,6 +47,6 @@ steps:
       - kubernetes:
           podSpec:
             containers:
-              - image: alpine:latest
+              - image: bitnami/kubectl:latest
     agents:
       queue: kubernetes
